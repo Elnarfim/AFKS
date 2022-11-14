@@ -1,0 +1,2 @@
+# AFKS
+AFK Screen
