@@ -10,8 +10,6 @@ local wowVersion = nil
 
 if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
 	wowVersion = "classic"
-elseif WOW_PROJECT_ID == (WOW_PROJECT_BURNING_CRUSADE_CLASSIC or 5) then
-	wowVersion = "bcc"
 elseif WOW_PROJECT_ID == (WOW_PROJECT_WRATH_CLASSIC or 11) then
 	wowVersion = "wrath"
 elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
@@ -140,13 +138,13 @@ function AFKS:OnEvent(event, ...)
 		end
 	end
 	if event == "PLAYER_CONTROL_GAINED" and UnitOnTaxi("player") then
-		if ((wowVersion == "classic" or wowVersion == "bcc" or wowVersion == "wrath") and GetPVPDesired()) or (wowVersion == "retail" and UnitIsPVP("player")) then
+		if ((wowVersion == "classic" or wowVersion == "wrath") and GetPVPDesired()) or (wowVersion == "retail" and UnitIsPVP("player")) then
 			self:SetAFK(false)
 		end
 	end
 
 	if (not AFKMode or UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles_IsInBattle())) then return end
-	if (wowVersion == "classic" or wowVersion == "bcc" or wowVersion == "wrath") and GetPVPDesired() then
+	if (wowVersion == "classic" or wowVersion == "wrath") and GetPVPDesired() then
 		return
 	elseif UnitIsPVP("player") and not IsResting() then
 		return

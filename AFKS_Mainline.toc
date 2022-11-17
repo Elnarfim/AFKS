@@ -1,4 +1,4 @@
-## Interface: 100000
+## Interface: 100002
 ## Author: Elnarfim
 ## Version: 1.0
 ## Title: AFK Screen Stand-alone
