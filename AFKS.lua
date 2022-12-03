@@ -1,8 +1,7 @@
 ----------------------------------------------
---	The codes are based on Elv UI	    --
+--	The codes are based on ElvUI	    --
 ----------------------------------------------
 
-local textfont = STANDARD_TEXT_FONT
 local AFKS = CreateFrame("Frame")
 local AFKMode = true
 
@@ -19,34 +18,35 @@ end
 --Cache global variables
 --Lua functions
 local _G = _G
-local GetTime = GetTime
-local tostring, pcall = tostring, pcall
-local floor = floor
-local format, strsub, gsub = string.format, string.sub, string.gsub
+local GetTime = _G.GetTime
+local tostring, pcall = _G.tostring, _G.pcall
+local floor = _G.floor
+local format, strsub, gsub = _G.string.format, _G.string.sub, _G.string.gsub
 --WoW API / Variables
-local ChatFrame_GetMobileEmbeddedTexture = ChatFrame_GetMobileEmbeddedTexture
-local ChatHistory_GetAccessID = ChatHistory_GetAccessID
-local Chat_GetChatCategory = Chat_GetChatCategory
-local CinematicFrame = CinematicFrame
-local CloseAllWindows = CloseAllWindows
-local CreateFrame = CreateFrame
-local GetBattlefieldStatus = GetBattlefieldStatus
-local GetColoredName = GetColoredName
-local GetGuildInfo = GetGuildInfo
-local GetScreenHeight = GetScreenHeight
-local GetScreenWidth = GetScreenWidth
-local InCombatLockdown = InCombatLockdown
-local IsInGuild = IsInGuild
-local IsShiftKeyDown = IsShiftKeyDown
-local MoveViewLeftStart = MoveViewLeftStart
-local MoveViewLeftStop = MoveViewLeftStop
-local MovieFrame = MovieFrame
-local PVEFrame_ToggleFrame = PVEFrame_ToggleFrame
-local RemoveExtraSpaces = RemoveExtraSpaces
-local Screenshot = Screenshot
-local SetCVar = SetCVar
-local UnitFactionGroup = UnitFactionGroup
-local UnitIsAFK = UnitIsAFK
+local textfont = _G.STANDARD_TEXT_FONT
+local ChatFrame_GetMobileEmbeddedTexture = _G.ChatFrame_GetMobileEmbeddedTexture
+local ChatHistory_GetAccessID = _G.ChatHistory_GetAccessID
+local Chat_GetChatCategory = _G.Chat_GetChatCategory
+local CinematicFrame = _G.CinematicFrame
+local CloseAllWindows = _G.CloseAllWindows
+local CreateFrame = _G.CreateFrame
+local GetBattlefieldStatus = _G.GetBattlefieldStatus
+local GetColoredName = _G.GetColoredName
+local GetGuildInfo = _G.GetGuildInfo
+local GetScreenHeight = _G.GetScreenHeight
+local GetScreenWidth = _G.GetScreenWidth
+local InCombatLockdown = _G.InCombatLockdown
+local IsInGuild = _G.IsInGuild
+local IsShiftKeyDown = _G.IsShiftKeyDown
+local MoveViewLeftStart = _G.MoveViewLeftStart
+local MoveViewLeftStop = _G.MoveViewLeftStop
+local MovieFrame = _G.MovieFrame
+local PVEFrame_ToggleFrame = _G.PVEFrame_ToggleFrame
+local RemoveExtraSpaces = _G.RemoveExtraSpaces
+local Screenshot = _G.Screenshot
+local SetCVar = _G.SetCVar
+local UnitFactionGroup = _G.UnitFactionGroup
+local UnitIsAFK = _G.UnitIsAFK
 
 local C_PetBattles_IsInBattle
 local C_Club_GetStreamInfo
@@ -54,26 +54,26 @@ local C_Club_GetClubInfo
 local C_TradeSkillUI_IsRecipeRepeating
 local Release_Type_Classic
 if wowVersion == "retail" then
-	C_PetBattles_IsInBattle = C_PetBattles.IsInBattle
-	C_Club_GetStreamInfo = C_Club.GetStreamInfo
-	C_Club_GetClubInfo = C_Club.GetClubInfo
-	C_TradeSkillUI_IsRecipeRepeating = C_TradeSkillUI.IsRecipeRepeating
-	C_Texture_GetAtlasInfo = C_Texture.GetAtlasInfo
-	C_UnitAuras_GetPlayerAuraBySpellID = C_UnitAuras.GetPlayerAuraBySpellID
-	C_Garrison_GetLandingPageGarrisonType = C_Garrison.GetLandingPageGarrisonType
-	C_Covenants_GetCovenantData = C_Covenants.GetCovenantData
-	C_Covenants_GetActiveCovenantID = C_Covenants.GetActiveCovenantID
+	C_PetBattles_IsInBattle = _G.C_PetBattles.IsInBattle
+	C_Club_GetStreamInfo = _G.C_Club.GetStreamInfo
+	C_Club_GetClubInfo = _G.C_Club.GetClubInfo
+	C_TradeSkillUI_IsRecipeRepeating = _G.C_TradeSkillUI.IsRecipeRepeating
+	C_Texture_GetAtlasInfo = _G.C_Texture.GetAtlasInfo
+	C_UnitAuras_GetPlayerAuraBySpellID = _G.C_UnitAuras.GetPlayerAuraBySpellID
+	C_Garrison_GetLandingPageGarrisonType = _G.C_Garrison.GetLandingPageGarrisonType
+	C_Covenants_GetCovenantData = _G.C_Covenants.GetCovenantData
+	C_Covenants_GetActiveCovenantID = _G.C_Covenants.GetActiveCovenantID
 else
-	Release_Type_Classic = LE_RELEASE_TYPE_CLASSIC
+	Release_Type_Classic = _G.LE_RELEASE_TYPE_CLASSIC
 end
 
-local GetExpansionDisplayInfo = GetExpansionDisplayInfo
-local GetExpansionLevel = GetExpansionLevel
-local classcolors = RAID_CLASS_COLORS
-local weekday_names = CALENDAR_WEEKDAY_NAMES
-local C_DateAndTime = C_DateAndTime
-local C_TimerNewTimer, C_TimerNewTicker, C_TimerAfter = C_Timer.NewTimer, C_Timer.NewTicker, C_Timer.After
-local GetLocalTime = GameTime_GetLocalTime
+local GetExpansionDisplayInfo = _G.GetExpansionDisplayInfo
+local GetExpansionLevel = _G.GetExpansionLevel
+local classcolors = _G.RAID_CLASS_COLORS
+local weekday_names = _G.CALENDAR_WEEKDAY_NAMES
+local C_DateAndTime = _G.C_DateAndTime
+local C_TimerNewTimer, C_TimerNewTicker, C_TimerAfter = _G.C_Timer.NewTimer, _G.C_Timer.NewTicker, _G.C_Timer.After
+local GetLocalTime = _G.GameTime_GetLocalTime
 
 local CAMERA_SPEED = 0.035
 local ignoreKeys = {
@@ -577,9 +577,19 @@ local function SetSpecPanel()
 	local atlasinfo = specid and SpecIDToBackgroundAtlas[specid]
 	local offset = panel_offset[specid] or 0
 	local info = atlasinfo and C_Texture_GetAtlasInfo(atlasinfo)
+
 	if info then
+		if not AFKS.AFKMode.bottom.specpanel:IsVisible() then
+			AFKS.AFKMode.bottom:SetBackdropColor(.06, .06, .06, 0)
+			AFKS.AFKMode.bottom.specpanel:Show()
+			AFKS.AFKMode.bottom.specpanelend:Show()
+		end
 		AFKS.AFKMode.bottom.specpanel:SetTexture(info.file)
 		AFKS.AFKMode.bottom.specpanel:SetTexCoord(info.leftTexCoord, info.rightTexCoord, info.topTexCoord+0.049+offset, info.bottomTexCoord)
+	else
+		AFKS.AFKMode.bottom:SetBackdropColor(.06, .06, .06, .8)
+		AFKS.AFKMode.bottom.specpanel:Hide()
+		AFKS.AFKMode.bottom.specpanelend:Hide()
 	end
 end
 --[[
