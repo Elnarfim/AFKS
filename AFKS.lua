@@ -545,6 +545,7 @@ local function SetSpecPanel()
 	}
 
 	local model_yoffset = {
+		[1] = 20, -- Human
 		[3] = 40, -- Dwarf
 		[6] = 65, -- Tauren
 		[8] = 10, -- Troll
@@ -680,12 +681,17 @@ function AFKS:Init()
 	self.AFKMode.bottom.name:SetTextColor(classcolors[class].r, classcolors[class].g, classcolors[class].b)
 
 	if wowVersion == "retail" then
+		local yoffset = 0
+		if select(2, GetPhysicalScreenSize()) == 2160 then
+			yoffset = 10
+		end
 		self.AFKMode.bottom.covenant = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
 		self.AFKMode.bottom.covenant:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, 0)
 
 		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
-		self.AFKMode.bottom.specpanel:SetPoint("BOTTOM", self.AFKMode.bottom, "BOTTOM", 105, -670)
+		--self.AFKMode.bottom.specpanel:SetPoint("BOTTOM", self.AFKMode.bottom, "BOTTOM", 105, -670)
+		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
 		self.AFKMode.bottom.specpanelend = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanelend:SetSize(GetScreenWidth() - 1602, GetScreenHeight() * (1 / 10))
 		self.AFKMode.bottom.specpanelend:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
