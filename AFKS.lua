@@ -9,7 +9,7 @@ local wowVersion = nil
 
 if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
 	wowVersion = "classic"
-elseif WOW_PROJECT_ID == (WOW_PROJECT_WRATH_CLASSIC or 11) then
+elseif WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC then
 	wowVersion = "wrath"
 elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
@@ -35,6 +35,7 @@ local GetColoredName = _G.GetColoredName
 local GetGuildInfo = _G.GetGuildInfo
 local GetScreenHeight = _G.GetScreenHeight
 local GetScreenWidth = _G.GetScreenWidth
+local GetPhysicalScreenSize = _G.GetPhysicalScreenSize
 local InCombatLockdown = _G.InCombatLockdown
 local IsInGuild = _G.IsInGuild
 local IsShiftKeyDown = _G.IsShiftKeyDown
@@ -61,8 +62,8 @@ if wowVersion == "retail" then
 	C_Texture_GetAtlasInfo = _G.C_Texture.GetAtlasInfo
 	C_UnitAuras_GetPlayerAuraBySpellID = _G.C_UnitAuras.GetPlayerAuraBySpellID
 	C_Garrison_GetLandingPageGarrisonType = _G.C_Garrison.GetLandingPageGarrisonType
-	C_Covenants_GetCovenantData = _G.C_Covenants.GetCovenantData
-	C_Covenants_GetActiveCovenantID = _G.C_Covenants.GetActiveCovenantID
+	--C_Covenants_GetCovenantData = _G.C_Covenants.GetCovenantData
+	--C_Covenants_GetActiveCovenantID = _G.C_Covenants.GetActiveCovenantID
 else
 	Release_Type_Classic = _G.LE_RELEASE_TYPE_CLASSIC
 end
@@ -545,7 +546,7 @@ local function SetSpecPanel()
 	}
 
 	local model_yoffset = {
-		[1] = 20, -- Human
+		[1] = 30, -- Human
 		[3] = 40, -- Dwarf
 		[6] = 65, -- Tauren
 		[8] = 10, -- Troll
@@ -683,14 +684,16 @@ function AFKS:Init()
 	if wowVersion == "retail" then
 		local yoffset = 0
 		if select(2, GetPhysicalScreenSize()) == 2160 then
-			yoffset = 10
+			yoffset = 20
 		end
+
+		--[[
 		self.AFKMode.bottom.covenant = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
 		self.AFKMode.bottom.covenant:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, 0)
+		]]
 
 		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
-		--self.AFKMode.bottom.specpanel:SetPoint("BOTTOM", self.AFKMode.bottom, "BOTTOM", 105, -670)
 		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
 		self.AFKMode.bottom.specpanelend = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanelend:SetSize(GetScreenWidth() - 1602, GetScreenHeight() * (1 / 10))
@@ -794,6 +797,7 @@ function AFKS:SetAFK(status)
 		end
 
 		if wowVersion == "retail" then
+			--[[
 			if GetExpansionLevel() == 8 then
 				local garrisonType = C_Garrison_GetLandingPageGarrisonType()
 				if (garrisonType == Enum.GarrisonType.Type_9_0) then
@@ -807,6 +811,7 @@ function AFKS:SetAFK(status)
 			else
 				self.AFKMode.bottom.covenant:Hide()
 			end
+			]]
 			SetSpecPanel()
 		end
 
