@@ -665,10 +665,16 @@ function AFKS:Init()
 	local factionGroup = UnitFactionGroup("player")
 	local size, offsetX, offsetY = 140, -20, -16
 	local nameOffsetX, nameOffsetY = -10, -28
+	if GetMonitorAspectRatio() == 1.6 then
+		nameOffsetY = -45 -- 16:10 monitor ratio fix
+	end
 	if factionGroup == "Neutral" then
 		factionGroup = "Panda"
 		size, offsetX, offsetY = 90, 15, 10
 		nameOffsetX, nameOffsetY = 20, -5
+		if GetMonitorAspectRatio() == 1.6 then
+			nameOffsetY = -22 -- a chinese font size is bigger than others
+		end
 	end
 	self.AFKMode.bottom.faction = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
 	self.AFKMode.bottom.faction:SetPoint("BOTTOMLEFT", self.AFKMode.bottom, "BOTTOMLEFT", offsetX, offsetY)
