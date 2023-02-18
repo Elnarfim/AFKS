@@ -23,7 +23,6 @@ local tostring, pcall = _G.tostring, _G.pcall
 local floor = _G.floor
 local format, strsub, gsub = _G.string.format, _G.string.sub, _G.string.gsub
 --WoW API / Variables
-local textfont = _G.STANDARD_TEXT_FONT
 local ChatFrame_GetMobileEmbeddedTexture = _G.ChatFrame_GetMobileEmbeddedTexture
 local ChatHistory_GetAccessID = _G.ChatHistory_GetAccessID
 local Chat_GetChatCategory = _G.Chat_GetChatCategory
@@ -53,7 +52,6 @@ local C_PetBattles_IsInBattle
 local C_Club_GetStreamInfo
 local C_Club_GetClubInfo
 local C_TradeSkillUI_IsRecipeRepeating
-local Release_Type_Classic
 if wowVersion == "retail" then
 	C_PetBattles_IsInBattle = _G.C_PetBattles.IsInBattle
 	C_Club_GetStreamInfo = _G.C_Club.GetStreamInfo
@@ -64,14 +62,10 @@ if wowVersion == "retail" then
 	C_Garrison_GetLandingPageGarrisonType = _G.C_Garrison.GetLandingPageGarrisonType
 	--C_Covenants_GetCovenantData = _G.C_Covenants.GetCovenantData
 	--C_Covenants_GetActiveCovenantID = _G.C_Covenants.GetActiveCovenantID
-else
-	Release_Type_Classic = _G.LE_RELEASE_TYPE_CLASSIC
 end
 
 local GetExpansionDisplayInfo = _G.GetExpansionDisplayInfo
 local GetExpansionLevel = _G.GetExpansionLevel
-local classcolors = _G.RAID_CLASS_COLORS
-local weekday_names = _G.CALENDAR_WEEKDAY_NAMES
 local C_DateAndTime = _G.C_DateAndTime
 local C_TimerNewTimer, C_TimerNewTicker, C_TimerAfter = _G.C_Timer.NewTimer, _G.C_Timer.NewTicker, _G.C_Timer.After
 local GetLocalTime = _G.GameTime_GetLocalTime
@@ -83,11 +77,11 @@ local ignoreKeys = {
 	RSHIFT = true,
 }
 local printKeys = {
-	["PRINTSCREEN"] = true,
+	PRINTSCREEN = true,
 }
 
 if IsMacClient() then
-	printKeys[_G["KEY_PRINTSCREEN_MAC"]] = true
+	printKeys[_G.KEY_PRINTSCREEN_MAC] = true
 end
 
 local isCamp = false
@@ -166,7 +160,7 @@ function AFKS:OnEvent(event, ...)
 	end
 	
 	if UnitIsAFK("player") and not self.isAFK then
-		if wowVersion == "retail" and PVEFrame and PVEFrame:IsShown() or isCamp then return end
+		if wowVersion == "retail" and _G.PVEFrame and _G.PVEFrame:IsShown() or isCamp then return end
 		self:SetAFK(true)
 	else
 		self:SetAFK(false)
@@ -215,14 +209,18 @@ local function OnKeyDown(self, key)
 end
 
 local function Chat_OnMouseWheel(self, delta)
-	if(delta == 1 and IsShiftKeyDown()) then
-		self:ScrollToTop()
-	elseif(delta == -1 and IsShiftKeyDown()) then
-		self:ScrollToBottom()
-	elseif(delta == -1) then
-		self:ScrollDown()
-	else
-		self:ScrollUp()
+	if delta == 1 then
+		if IsShiftKeyDown() then
+			self:ScrollToTop()
+		else
+			self:ScrollUp()
+		end
+	elseif delta == -1 then
+		if IsShiftKeyDown() then
+			self:ScrollToBottom()
+		else
+			self:ScrollDown()
+		end
 	end
 end
 
@@ -284,7 +282,7 @@ end
 local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14)
 	local coloredName = GetColoredName(event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14);
 	local type = strsub(event, 10)
-	local info = ChatTypeInfo[type]
+	local info = _G.ChatTypeInfo[type]
 --[[
 	if(event == "CHAT_MSG_BN_WHISPER") then
 		coloredName = GetBNFriendColor(arg2, arg13)
@@ -356,7 +354,7 @@ local function LoopAnimations()
 end
 
 local function FontTemplate(fs, fontSize, outline)
-	fs.font = textfont
+	fs.font = _G.STANDARD_TEXT_FONT
 	fs.fontSize = fontSize
 
 	fontSize = fontSize or 12
@@ -364,7 +362,7 @@ local function FontTemplate(fs, fontSize, outline)
 	if not outline then
 		outline = ""
 	end
-	fs:SetFont(textfont, fontSize, outline)
+	fs:SetFont(_G.STANDARD_TEXT_FONT, fontSize, outline)
 	fs:SetShadowColor(0, 0, 0, 1)
 	fs:SetShadowOffset(1, -1)
 end
@@ -594,6 +592,36 @@ local function SetSpecPanel()
 		AFKS.AFKMode.bottom.specpanelend:Hide()
 	end
 end
+
+local function GetCalenderSchedule()
+	local today = C_DateAndTime.GetCurrentCalendarTime()
+        for i = 1, C_Calendar.GetNumDayEvents(0, today.monthDay) do
+		local event = C_Calendar.GetDayEvent(0, today.monthDay, i)
+		if event and event.calendarType == "PLAYER" and event.startTime.hour > today.hour then
+			if event.inviteStatus == 2 or event.inviteStatus == 4 then
+				return
+			end
+
+			if event.inviteStatus == 1 then
+				AFKS.AFKMode.bottom.schedule:SetTextColor(0, 1, 0)
+			end
+			AFKS.AFKMode.bottom.calendaricon:SetTexture(event.iconTexture)
+			local minute = event.startTime.minute
+			if event.startTime.minute < 10 then
+				minute = "0"..minute
+			end
+			if event.startTime.hour < 12 then
+				AFKS.AFKMode.bottom.schedule:SetText("(".._G.TIMEMANAGER_AM.." "..event.startTime.hour..":"..minute..")"..event.title)
+				break
+			else
+				event.startTime.hour = event.startTime.hour - 12
+				AFKS.AFKMode.bottom.schedule:SetText("(".._G.TIMEMANAGER_PM.." "..event.startTime.hour..":"..minute..")"..event.title)
+				break
+			end
+		end
+	end                   
+end
+
 --[[
 local function GetWoWLogo()
 	if wowVersion == "classic" then
@@ -613,7 +641,7 @@ local function GetWoWLogo()
 	if wowVersion == "retail" then
 		expansion = GetExpansionDisplayInfo(GetExpansionLevel())
 	else
-		expansion = GetExpansionDisplayInfo(GetExpansionLevel(), Release_Type_Classic)
+		expansion = GetExpansionDisplayInfo(GetExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
 	end
 	return expansion and expansion.logo
 end
@@ -624,8 +652,8 @@ function AFKS:Init()
 	
 	self.AFKMode = CreateFrame("Frame", "AFKSFrame")
 	self.AFKMode:SetFrameLevel(1)
-	self.AFKMode:SetScale(UIParent:GetScale())
-	self.AFKMode:SetAllPoints(UIParent)
+	self.AFKMode:SetScale(_G.UIParent:GetScale())
+	self.AFKMode:SetAllPoints(_G.UIParent)
 	self.AFKMode:Hide()
 	self.AFKMode:EnableKeyboard(true)
 	self.AFKMode:SetScript("OnKeyDown", OnKeyDown)
@@ -686,28 +714,7 @@ function AFKS:Init()
 	FontTemplate(self.AFKMode.bottom.name, 20, "OUTLINE")
 	self.AFKMode.bottom.name:SetText(format("%s-%s", UnitName("player"), GetRealmName()))
 	self.AFKMode.bottom.name:SetPoint("TOPLEFT", self.AFKMode.bottom.faction, "TOPRIGHT", nameOffsetX, nameOffsetY)
-	self.AFKMode.bottom.name:SetTextColor(classcolors[class].r, classcolors[class].g, classcolors[class].b)
-
-	if wowVersion == "retail" then
-		local yoffset = 0
-		if select(2, GetPhysicalScreenSize()) == 2160 then
-			yoffset = 20
-		end
-
-		--[[
-		self.AFKMode.bottom.covenant = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
-		self.AFKMode.bottom.covenant:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, 0)
-		]]
-
-		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
-		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
-		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
-		self.AFKMode.bottom.specpanelend = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
-		self.AFKMode.bottom.specpanelend:SetSize(GetScreenWidth() - 1602, GetScreenHeight() * (1 / 10))
-		self.AFKMode.bottom.specpanelend:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
-		self.AFKMode.bottom.specpanelend:SetTexture("Interface/BUTTONS/WHITE8X8")
-		self.AFKMode.bottom.specpanelend:SetColorTexture(0, 0, 0)
-	end
+	self.AFKMode.bottom.name:SetTextColor(_G.RAID_CLASS_COLORS[class].r, _G.RAID_CLASS_COLORS[class].g, _G.RAID_CLASS_COLORS[class].b)
 
 	self.AFKMode.bottom.guild = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
 	FontTemplate(self.AFKMode.bottom.guild, 20, "OUTLINE")
@@ -733,6 +740,34 @@ function AFKS:Init()
 		self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 265)
 	else
 		self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 220)
+	end
+
+	if wowVersion == "retail" then
+		local yoffset = 0
+		if select(2, GetPhysicalScreenSize()) == 2160 then
+			yoffset = 20
+		end
+
+		--[[
+		self.AFKMode.bottom.covenant = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
+		self.AFKMode.bottom.covenant:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, 0)
+		]]
+
+		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
+		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
+		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
+		self.AFKMode.bottom.specpanelend = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
+		self.AFKMode.bottom.specpanelend:SetSize(GetScreenWidth() - 1602, GetScreenHeight() * (1 / 10))
+		self.AFKMode.bottom.specpanelend:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
+		self.AFKMode.bottom.specpanelend:SetTexture("Interface/BUTTONS/WHITE8X8")
+		self.AFKMode.bottom.specpanelend:SetColorTexture(0, 0, 0)
+		self.AFKMode.bottom.schedule = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+		FontTemplate(self.AFKMode.bottom.schedule, 20, "OUTLINE")
+		self.AFKMode.bottom.schedule:SetPoint("BOTTOMLEFT", self.AFKMode.bottom.logo, "BOTTOMRIGHT", 200, 0)
+		self.AFKMode.bottom.schedule:SetTextColor(1, 1, 1)
+		self.AFKMode.bottom.calendaricon = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
+		self.AFKMode.bottom.calendaricon:SetPoint("RIGHT", self.AFKMode.bottom.schedule, "LEFT", 0, 0)
+		self.AFKMode.bottom.calendaricon:SetSize(40, 40)
 	end
 
 	self.AFKMode.bottom.model = CreateFrame("PlayerModel", "AFKSPlayerModel", self.AFKMode.bottom.modelHolder)
@@ -772,7 +807,7 @@ function AFKS:UpdateTimer()
 	else
 		local today = C_DateAndTime.GetCurrentCalendarTime()
 		local _, _, month, day, year = today.hour, today.minute, today.month, today.monthDay, today.year
-		local weekday = weekday_names[today.weekday]
+		local weekday = _G.CALENDAR_WEEKDAY_NAMES[today.weekday]
 
 		if today.weekday == 7 then
 			weekday = "|cFF2b59FF"..weekday.."|r"
@@ -794,7 +829,7 @@ function AFKS:SetAFK(status)
 		MoveViewLeftStart(CAMERA_SPEED)
 		self.AFKMode:Show()
 		CloseAllWindows()
-		UIParent:Hide()
+		_G.UIParent:Hide()
 
 		if(IsInGuild()) then
 			local guildName, guildRankName = GetGuildInfo("player")
@@ -820,6 +855,7 @@ function AFKS:SetAFK(status)
 			end
 			]]
 			SetSpecPanel()
+			GetCalenderSchedule()
 		end
 
 		self.AFKMode.bottom.model.curAnimation = "wave"
@@ -846,7 +882,7 @@ function AFKS:SetAFK(status)
 
 		self.isAFK = true
 	elseif(self.isAFK) then
-		UIParent:Show()
+		_G.UIParent:Show()
 		self.AFKMode:Hide()
 		MoveViewLeftStop();
 
@@ -858,7 +894,7 @@ function AFKS:SetAFK(status)
 
 		self.AFKMode.chat:UnregisterAllEvents()
 		self.AFKMode.chat:Clear()
-		if wowVersion == "retail" and PVEFrame:IsShown() then --odd bug, frame is blank
+		if wowVersion == "retail" and _G.PVEFrame:IsShown() then --odd bug, frame is blank
 			PVEFrame_ToggleFrame()
 			PVEFrame_ToggleFrame()
 		end
