@@ -1,6 +1,6 @@
 ## Interface: 100005
 ## Author: Elnarfim
-## Version: 1.5
+## Version: 1.51
 ## Title: AFK Screen Stand-alone
 ## Notes: an Enhanced standalone version of AFK Screen from ElvUI
 ## Notes-koKR: 향상된 ElvUI의 자리 비움 화면
