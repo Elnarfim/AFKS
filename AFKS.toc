@@ -1,9 +1,10 @@
-## Interface: 100005
+## Interface: 100007
 ## Author: Elnarfim
-## Version: 1.51
-## Title: AFK Screen Stand-alone
+## Version: 1.52
+## Title: AFKS - AFK Screen Stand-alone
+## Title-koKR: AFKS - 자리비움 스크린
 ## Notes: an Enhanced standalone version of AFK Screen from ElvUI
-## Notes-koKR: 향상된 ElvUI의 자리 비움 화면
+## Notes-koKR: 향상된 ElvUI의 자리 비움 스크린
 
 Locales\enUS.lua
 Locales\koKR.lua

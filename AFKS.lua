@@ -3,7 +3,6 @@
 ----------------------------------------------
 
 local AFKS = CreateFrame("Frame")
-local AFKMode = true
 
 local wowVersion = nil
 
@@ -41,6 +40,8 @@ local UnitFactionGroup = UnitFactionGroup
 local UnitIsAFK = UnitIsAFK
 
 local GetLocale = GetLocale
+local IsResting = IsResting
+local GetZonePVPInfo = GetZonePVPInfo
 local UnitClass = UnitClass
 local UnitRace = UnitRace
 local GetColoredName = GetColoredName
@@ -64,7 +65,7 @@ local C_Calendar_GetDayEvent
 local C_Club_GetStreamInfo
 local C_Club_GetClubInfo
 local C_TradeSkillUI_IsRecipeRepeating
-local CastingInfo
+local UnitCastingInfo
 
 if wowVersion ~= "classic" then
 	C_DateAndTime_GetCurrentCalendarTime = C_DateAndTime.GetCurrentCalendarTime
@@ -77,13 +78,10 @@ if wowVersion == "retail" then
 	C_Club_GetStreamInfo = C_Club.GetStreamInfo
 	C_Club_GetClubInfo = C_Club.GetClubInfo
 	C_TradeSkillUI_IsRecipeRepeating = C_TradeSkillUI.IsRecipeRepeating
-	C_Texture_GetAtlasInfo = C_Texture.GetAtlasInfo
-	C_UnitAuras_GetPlayerAuraBySpellID = C_UnitAuras.GetPlayerAuraBySpellID
-	C_Garrison_GetLandingPageGarrisonType = C_Garrison.GetLandingPageGarrisonType
 	--C_Covenants_GetCovenantData = C_Covenants.GetCovenantData
 	--C_Covenants_GetActiveCovenantID = C_Covenants.GetActiveCovenantID
 else
-	CastingInfo = CastingInfo
+	UnitCastingInfo = _G.UnitCastingInfo
 end
 
 local MovieFrame = _G.MovieFrame
@@ -105,7 +103,8 @@ end
 
 local isCamp = false
 
-SlashCmdList["AFKSCampToggle"] = function()
+SLASH_AFKSCampToggle1 = "/AFKCAMP"
+function SlashCmdList.AFKSCampToggle()
 	if isCamp then
 		isCamp = false
 		print(AFKS_CAMPOFF)
@@ -114,7 +113,6 @@ SlashCmdList["AFKSCampToggle"] = function()
 		print(AFKS_CAMPON)
 	end
 end
-SLASH_AFKSCampToggle1 = "/AFKCAMP"
 
 function AFKS:OnEvent(event, ...)
 	if event == "PLAYER_REGEN_DISABLED" or event == "LFG_PROPOSAL_SHOW" or event == "UPDATE_BATTLEFIELD_STATUS" or event == "PARTY_INVITE_REQUEST" then
@@ -152,18 +150,22 @@ function AFKS:OnEvent(event, ...)
 		end
 	end
 	if event == "PLAYER_CONTROL_GAINED" and UnitOnTaxi("player") then
-		if ((wowVersion == "classic" or wowVersion == "wrath") and GetPVPDesired()) or (wowVersion == "retail" and UnitIsPVP("player")) then
+		if (wowVersion ~= "retail" and GetPVPDesired()) or (wowVersion == "retail" and UnitIsPVP("player")) then
 			self:SetAFK(false)
 		end
 	end
 
-	if (not AFKMode or UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles_IsInBattle())) then return end
-	if (wowVersion == "classic" or wowVersion == "wrath") and GetPVPDesired() then
-		return
-	elseif UnitIsPVP("player") and not IsResting() then
+	if UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles_IsInBattle()) then
 		return
 	end
-	if (InCombatLockdown() or CinematicFrame:IsShown() or MovieFrame:IsShown()) then return end
+	if (wowVersion == "classic" or wowVersion == "wrath") and GetPVPDesired() and GetZonePVPInfo() ~= "sanctuary" and not IsResting() then
+		return
+	elseif UnitIsPVP("player") and GetZonePVPInfo() ~= "sanctuary" and not IsResting() then
+		return
+	end
+	if InCombatLockdown() or CinematicFrame:IsShown() or MovieFrame:IsShown() then
+		return
+	end
 	if wowVersion == "retail" then
 		if C_TradeSkillUI_IsRecipeRepeating() then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
@@ -171,7 +173,7 @@ function AFKS:OnEvent(event, ...)
 			return
 		end
 	else
-		if CastingInfo("player") ~= nil then
+		if UnitCastingInfo("player") ~= nil then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
 			C_TimerAfter(30, function() self:OnEvent() end)
 			return
@@ -187,6 +189,22 @@ function AFKS:OnEvent(event, ...)
 end
 
 function AFKS:Toggle()
+	self:RegisterEvent("PLAYER_FLAGS_CHANGED", "OnEvent")
+	self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnEvent")
+	self:RegisterEvent("PLAYER_CONTROL_GAINED", "OnEvent")
+	self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS", "OnEvent")
+	if wowVersion == "retail" then
+		self:RegisterEvent("LFG_PROPOSAL_SHOW", "OnEvent")
+		self:RegisterEvent("PARTY_INVITE_REQUEST", "OnEvent")
+		self:RegisterEvent("VIGNETTE_MINIMAP_UPDATED", "OnEvent")
+		self:RegisterEvent("TALKINGHEAD_REQUESTED", "OnEvent")
+	end
+	self:SetScript("OnEvent", function(event, ...)
+		self:OnEvent(...)
+	end)
+	SetCVar("autoClearAFK", "1")
+
+	--[[
 	if(AFKMode) then
 		self:RegisterEvent("PLAYER_FLAGS_CHANGED", "OnEvent")
 		self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnEvent")
@@ -214,6 +232,7 @@ function AFKS:Toggle()
 			self:UnregisterEvent("TALKINGHEAD_REQUESTED")
 		end
 	end
+	]]
 end
 
 local function OnKeyDown(self, key)
@@ -346,10 +365,7 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 	end
 
 	if event == "CHAT_MSG_CHANNEL" then
-		if arg7 == 1 or arg7 == 2 or arg7 == 22 or arg7 == 42 then
-			return
-		end
-		if arg7 == 26 then -- private channel filter
+		if arg7 == 1 or arg7 == 2 or arg7 == 22 or arg7 == 26 or arg7 == 42 then
 			return
 		end
 		body = "[" .. arg4 .. "] " .. body
@@ -583,7 +599,7 @@ local function SetSpecPanel()
 		yoffset = model_yoffset[raceid]
 	end
 	if select(2, UnitClass("player")) == "EVOKER" then
-		if C_UnitAuras_GetPlayerAuraBySpellID(372014) then
+		if _G.C_UnitAuras.GetPlayerAuraBySpellID(372014) then
 			yoffset = -7
 		else
 			yoffset = 70
@@ -595,7 +611,7 @@ local function SetSpecPanel()
 	local specid = select(1,GetSpecializationInfo(GetSpecialization())) 
 	local atlasinfo = specid and SpecIDToBackgroundAtlas[specid]
 	local offset = panel_offset[specid] or 0
-	local info = atlasinfo and C_Texture_GetAtlasInfo(atlasinfo)
+	local info = atlasinfo and _G.C_Texture.GetAtlasInfo(atlasinfo)
 
 	if info then
 		if not AFKS.AFKMode.bottom.specpanel:IsVisible() then
@@ -675,6 +691,10 @@ end
 function AFKS:Init()
 	local logo = GetWoWLogo()
 	local class = select(2, UnitClass("player"))
+	local panelheight = GetScreenHeight() * (1 / 10)
+	if panelheight < 102 then -- Adjust to 102.4 in small resolution
+		panelheight = 102.4
+	end
 	
 	self.AFKMode = CreateFrame("Frame", "AFKSFrame")
 	self.AFKMode:SetFrameLevel(1)
@@ -705,7 +725,7 @@ function AFKS:Init()
 	SetTemplate(self.AFKMode.bottom)
 	self.AFKMode.bottom:SetPoint("BOTTOM", self.AFKMode, "BOTTOM", 0, -2)
 	self.AFKMode.bottom:SetWidth(GetScreenWidth() + 4)
-	self.AFKMode.bottom:SetHeight(GetScreenHeight() * (1 / 10))
+	self.AFKMode.bottom:SetHeight(panelheight)
 
 	self.AFKMode.bottom.logo = self.AFKMode:CreateTexture(nil, 'OVERLAY')
 	self.AFKMode.bottom.logo:SetSize(256, 128)
@@ -770,7 +790,7 @@ function AFKS:Init()
 
 	if wowVersion == "retail" then
 		local yoffset = 0
-		if select(2, GetPhysicalScreenSize()) == 2160 then
+		if select(2, GetPhysicalScreenSize()) == 2160 then -- 4K resolution offset
 			yoffset = 20
 		end
 
@@ -783,7 +803,7 @@ function AFKS:Init()
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
 		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
 		self.AFKMode.bottom.specpanelend = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
-		self.AFKMode.bottom.specpanelend:SetSize(GetScreenWidth() - 1602, GetScreenHeight() * (1 / 10))
+		self.AFKMode.bottom.specpanelend:SetSize(GetScreenWidth() - 1602, panelheight)
 		self.AFKMode.bottom.specpanelend:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
 		self.AFKMode.bottom.specpanelend:SetTexture("Interface/BUTTONS/WHITE8X8")
 		self.AFKMode.bottom.specpanelend:SetColorTexture(0, 0, 0)
@@ -867,11 +887,11 @@ function AFKS:SetAFK(status)
 		if wowVersion == "retail" then
 			--[[
 			if GetExpansionLevel() == 8 then
-				local garrisonType = C_Garrison_GetLandingPageGarrisonType()
+				local garrisonType = _G.C_Garrison.GetLandingPageGarrisonType()
 				if (garrisonType == Enum.GarrisonType.Type_9_0) then
 					local covenantData = C_Covenants_GetCovenantData(C_Covenants_GetActiveCovenantID())
 					if covenantData and covenantData.textureKit then
-						local info = C_Texture_GetAtlasInfo("shadowlands-landingbutton-"..covenantData.textureKit.."-up")
+						local info = _G.C_Texture.GetAtlasInfo("shadowlands-landingbutton-"..covenantData.textureKit.."-up")
 						self.AFKMode.bottom.covenant:SetAtlas("shadowlands-landingbutton-"..covenantData.textureKit.."-up", true)
 						self.AFKMode.bottom.covenant:SetSize(info and math.floor(info.width * 0.6) or 0, info and math.floor(info.height * 0.6) or 0)
 					end
