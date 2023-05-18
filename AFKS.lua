@@ -14,6 +14,8 @@ elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
 end
 
+local tocVersion = select(4, GetBuildInfo())
+
 --Cache global variables
 --Lua functions
 local _G = _G
@@ -500,6 +502,7 @@ local function SetSpecPanel()
 		-- Evoker
 		[1467] = "talents-background-evoker-devastation",
 		[1468] = "talents-background-evoker-preservation",
+		[1473] = "talents-background-evoker-augmentation",
 
 		-- Hunter
 		[253] = "talents-background-hunter-beastmastery",
@@ -576,21 +579,22 @@ local function SetSpecPanel()
 		[269] = 0.015, -- Wind Monk
 		[1467] = 0.014, -- Devast Evoker
 		[1468] = 0.023, -- Preserv Evoker
+		[1473] = 0.023, -- Augment Evoker
 	}
 
 	local model_yoffset = {
-		[1] = 30, -- Human
-		[3] = 40, -- Dwarf
-		[6] = 65, -- Tauren
-		[8] = 10, -- Troll
-		[11] = 20, -- Draenei
-		[22] = 50, -- Worgen
-		[24] = 65, -- Pandaren (Neutral)
-		[25] = 65, -- Pandaren (Horde)
-		[26] = 65, -- Pandaren (Alliance)
-		[28] = 65, -- Highmountain
-		[30] = 20, -- Lightforged
-		[31] = 10, -- Zandalari
+			[1] = 30, -- Human
+			[3] = 40, -- Dwarf
+			[6] = 65, -- Tauren
+			[8] = 10, -- Troll
+			[11] = 20, -- Draenei
+			[22] = 50, -- Worgen
+			[24] = 65, -- Pandaren (Neutral)
+			[25] = 65, -- Pandaren (Horde)
+			[26] = 65, -- Pandaren (Alliance)
+			[28] = 65, -- Highmountain
+			[30] = 20, -- Lightforged
+			[31] = 10, -- Zandalari
 	}
 
 	local yoffset = 0
@@ -606,7 +610,11 @@ local function SetSpecPanel()
 		end
 	end
 	AFKS.AFKMode.bottom.modelHolder:ClearAllPoints()
-	AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 265 + yoffset)
+	if tocVersion == 100105 then
+		AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 300 + yoffset)
+	else
+		AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 265 + yoffset)
+	end
 
 	local specid = select(1,GetSpecializationInfo(GetSpecialization())) 
 	local atlasinfo = specid and SpecIDToBackgroundAtlas[specid]
@@ -693,6 +701,9 @@ function AFKS:Init()
 	local class = select(2, UnitClass("player"))
 	local panelheight = GetScreenHeight() * (1 / 10)
 	if panelheight < 102 then -- Adjust to 102.4 in small resolution
+		panelheight = 102.4
+	end
+	if tocVersion == 100105 then
 		panelheight = 102.4
 	end
 	
