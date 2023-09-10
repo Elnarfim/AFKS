@@ -14,8 +14,6 @@ elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
 end
 
-local tocVersion = select(4, GetBuildInfo())
-
 --Cache global variables
 --Lua functions
 local _G = _G
@@ -56,18 +54,22 @@ local GetExpansionLevel = GetExpansionLevel
 local C_TimerNewTimer, C_TimerNewTicker, C_TimerAfter = C_Timer.NewTimer, C_Timer.NewTicker, C_Timer.After
 local GameTime_GetLocalTime = GameTime_GetLocalTime
 
+local ChatType_Info = _G.ChatTypeInfo
+
 local ChatHistory_GetAccessID = ChatHistory_GetAccessID
 local Chat_GetChatCategory = Chat_GetChatCategory
 local ChatFrame_GetMobileEmbeddedTexture = ChatFrame_GetMobileEmbeddedTexture
 
+-- APIs for Retail or Classic only
 local C_PetBattles_IsInBattle
+local C_Texture_GetAtlasInfo
+local C_UnitAuras_GetPlayerAuraBySpellID
 local C_DateAndTime_GetCurrentCalendarTime
 local C_Calendar_GetNumDayEvents
 local C_Calendar_GetDayEvent
 local C_Club_GetStreamInfo
 local C_Club_GetClubInfo
 local C_TradeSkillUI_IsRecipeRepeating
-local UnitCastingInfo
 
 if wowVersion ~= "classic" then
 	C_DateAndTime_GetCurrentCalendarTime = C_DateAndTime.GetCurrentCalendarTime
@@ -75,6 +77,8 @@ end
 
 if wowVersion == "retail" then
 	C_PetBattles_IsInBattle = C_PetBattles and C_PetBattles.IsInBattle 
+	C_Texture_GetAtlasInfo = C_Texture.GetAtlasInfo
+	C_UnitAuras_GetPlayerAuraBySpellID = C_UnitAuras.GetPlayerAuraBySpellID
 	C_Calendar_GetNumDayEvents = C_Calendar.GetNumDayEvents
 	C_Calendar_GetDayEvent = C_Calendar.GetDayEvent
 	C_Club_GetStreamInfo = C_Club.GetStreamInfo
@@ -82,8 +86,6 @@ if wowVersion == "retail" then
 	C_TradeSkillUI_IsRecipeRepeating = C_TradeSkillUI.IsRecipeRepeating
 	--C_Covenants_GetCovenantData = C_Covenants.GetCovenantData
 	--C_Covenants_GetActiveCovenantID = C_Covenants.GetActiveCovenantID
-else
-	UnitCastingInfo = _G.UnitCastingInfo
 end
 
 local MovieFrame = _G.MovieFrame
@@ -116,7 +118,20 @@ function SlashCmdList.AFKSCampToggle()
 	end
 end
 
+local default_options = {
+	enabled = true,
+	hidechat = false,
+}
+
 function AFKS:OnEvent(event, ...)
+	if event == "VARIABLES_LOADED" then
+		AFKS_DB = AFKS_DB or CopyTable(default_options)
+		self.options = AFKS_DB
+
+		self:Toggle()
+		self:RenderOptions()
+	end
+
 	if event == "PLAYER_REGEN_DISABLED" or event == "LFG_PROPOSAL_SHOW" or event == "UPDATE_BATTLEFIELD_STATUS" or event == "PARTY_INVITE_REQUEST" then
 		if event == "UPDATE_BATTLEFIELD_STATUS" then
 			local status = GetBattlefieldStatus(...)
@@ -157,6 +172,10 @@ function AFKS:OnEvent(event, ...)
 		end
 	end
 
+	if not self.options.enabled then
+		return
+	end
+
 	if UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles_IsInBattle()) then
 		return
 	end
@@ -175,7 +194,7 @@ function AFKS:OnEvent(event, ...)
 			return
 		end
 	else
-		if UnitCastingInfo("player") ~= nil then
+		if CastingInfo() then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
 			C_TimerAfter(30, function() self:OnEvent() end)
 			return
@@ -185,29 +204,13 @@ function AFKS:OnEvent(event, ...)
 	if UnitIsAFK("player") and not self.isAFK then
 		if wowVersion == "retail" and _G.PVEFrame and _G.PVEFrame:IsShown() or isCamp then return end
 		self:SetAFK(true)
-	else
+	elseif not UnitIsAFK("player") then
 		self:SetAFK(false)
 	end
 end
 
 function AFKS:Toggle()
-	self:RegisterEvent("PLAYER_FLAGS_CHANGED", "OnEvent")
-	self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnEvent")
-	self:RegisterEvent("PLAYER_CONTROL_GAINED", "OnEvent")
-	self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS", "OnEvent")
-	if wowVersion == "retail" then
-		self:RegisterEvent("LFG_PROPOSAL_SHOW", "OnEvent")
-		self:RegisterEvent("PARTY_INVITE_REQUEST", "OnEvent")
-		self:RegisterEvent("VIGNETTE_MINIMAP_UPDATED", "OnEvent")
-		self:RegisterEvent("TALKINGHEAD_REQUESTED", "OnEvent")
-	end
-	self:SetScript("OnEvent", function(event, ...)
-		self:OnEvent(...)
-	end)
-	SetCVar("autoClearAFK", "1")
-
-	--[[
-	if(AFKMode) then
+	if(self.options.enabled) then
 		self:RegisterEvent("PLAYER_FLAGS_CHANGED", "OnEvent")
 		self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnEvent")
 		self:RegisterEvent("PLAYER_CONTROL_GAINED", "OnEvent")
@@ -218,9 +221,6 @@ function AFKS:Toggle()
 			self:RegisterEvent("VIGNETTE_MINIMAP_UPDATED", "OnEvent")
 			self:RegisterEvent("TALKINGHEAD_REQUESTED", "OnEvent")
 		end
-		self:SetScript("OnEvent", function(event, ...)
-			self:OnEvent(...)
-		end)
 		SetCVar("autoClearAFK", "1")
 	else
 		self:UnregisterEvent("PLAYER_FLAGS_CHANGED")
@@ -234,7 +234,6 @@ function AFKS:Toggle()
 			self:UnregisterEvent("TALKINGHEAD_REQUESTED")
 		end
 	end
-	]]
 end
 
 local function OnKeyDown(self, key)
@@ -322,7 +321,7 @@ end
 local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14)
 	local coloredName = GetColoredName(event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14);
 	local type = strsub(event, 10)
-	local info = _G.ChatTypeInfo[type]
+	local info = ChatType_Info[type]
 --[[
 	if(event == "CHAT_MSG_BN_WHISPER") then
 		coloredName = GetBNFriendColor(arg2, arg13)
@@ -603,23 +602,19 @@ local function SetSpecPanel()
 		yoffset = model_yoffset[raceid]
 	end
 	if select(2, UnitClass("player")) == "EVOKER" then
-		if _G.C_UnitAuras.GetPlayerAuraBySpellID(372014) then
+		if C_UnitAuras_GetPlayerAuraBySpellID(372014) then
 			yoffset = -7
 		else
 			yoffset = 70
 		end
 	end
 	AFKS.AFKMode.bottom.modelHolder:ClearAllPoints()
-	if tocVersion == 100105 then
-		AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 300 + yoffset)
-	else
-		AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 265 + yoffset)
-	end
+	AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 265 + yoffset)
 
 	local specid = select(1,GetSpecializationInfo(GetSpecialization())) 
 	local atlasinfo = specid and SpecIDToBackgroundAtlas[specid]
 	local offset = panel_offset[specid] or 0
-	local info = atlasinfo and _G.C_Texture.GetAtlasInfo(atlasinfo)
+	local info = atlasinfo and C_Texture_GetAtlasInfo(atlasinfo)
 
 	if info then
 		if not AFKS.AFKMode.bottom.specpanel:IsVisible() then
@@ -696,6 +691,36 @@ local function GetWoWLogo()
 	return expansion and expansion.logo
 end
 
+function AFKS:RenderOptions()
+	local panel = CreateFrame("Frame", "AFKS_OptionPanel")
+	panel.name = "AFKS"
+
+	local title = panel:CreateFontString("ARTWORK", nil, "GameFontNormalLarge")
+	title:SetPoint("TOPLEFT", 10, -10)
+	title:SetText("AFKS")
+
+	local enable = CreateFrame("CheckButton", nil, panel, "ChatConfigCheckButtonTemplate")
+	enable:SetPoint("TOPLEFT", 10, -35)
+	enable.Text:SetText(AFKS_ENABLED_TEXT)
+	enable.tooltip = AFKS_ENABLED_TOOLTIP
+	enable:HookScript("OnClick", function(_, btn, down)
+		self.options.enabled = enable:GetChecked()
+		self:Toggle()
+	end)
+	enable:SetChecked(self.options.enabled)
+
+	local hidechat = CreateFrame("CheckButton", nil, panel, "ChatConfigCheckButtonTemplate")
+	hidechat:SetPoint("TOPLEFT", 10, -65)
+	hidechat.Text:SetText(AFKS_HIDECHAT_TEXT)
+	hidechat.tooltip = AFKS_HIDECHAT_TOOLTIP
+	hidechat:HookScript("OnClick", function(_, btn, down)
+		self.options.hidechat = hidechat:GetChecked()
+	end)
+	hidechat:SetChecked(self.options.hidechat)
+
+	InterfaceOptions_AddCategory(panel)
+end
+
 function AFKS:Init()
 	local logo = GetWoWLogo()
 	local class = select(2, UnitClass("player"))
@@ -703,10 +728,7 @@ function AFKS:Init()
 	if panelheight < 102 then -- Adjust to 102.4 in small resolution
 		panelheight = 102.4
 	end
-	if tocVersion == 100105 then
-		panelheight = 102.4
-	end
-	
+
 	self.AFKMode = CreateFrame("Frame", "AFKSFrame")
 	self.AFKMode:SetFrameLevel(1)
 	self.AFKMode:SetScale(_G.UIParent:GetScale())
@@ -842,10 +864,15 @@ function AFKS:Init()
 	end)
 
 	self.isInterrupted = false
-	self:Toggle()
+
+	self:SetScript("OnEvent", function(event, ...)
+		self:OnEvent(...)
+	end)
 end
 
 do
+	AFKS:RegisterEvent("VARIABLES_LOADED")
+
 	AFKS:Init()
 
 	if wowVersion == "retail" then
@@ -882,7 +909,7 @@ function AFKS:UpdateTimer()
 end
 
 function AFKS:SetAFK(status)
-	if(status) then
+	if status then
 		MoveViewLeftStart(CAMERA_SPEED)
 		self.AFKMode:Show()
 		CloseAllWindows()
@@ -902,7 +929,7 @@ function AFKS:SetAFK(status)
 				if (garrisonType == Enum.GarrisonType.Type_9_0) then
 					local covenantData = C_Covenants_GetCovenantData(C_Covenants_GetActiveCovenantID())
 					if covenantData and covenantData.textureKit then
-						local info = _G.C_Texture.GetAtlasInfo("shadowlands-landingbutton-"..covenantData.textureKit.."-up")
+						local info = C_Texture_GetAtlasInfo("shadowlands-landingbutton-"..covenantData.textureKit.."-up")
 						self.AFKMode.bottom.covenant:SetAtlas("shadowlands-landingbutton-"..covenantData.textureKit.."-up", true)
 						self.AFKMode.bottom.covenant:SetSize(info and math.floor(info.width * 0.6) or 0, info and math.floor(info.height * 0.6) or 0)
 					end
@@ -925,20 +952,26 @@ function AFKS:SetAFK(status)
 		self.startTime = GetTime()
 		self.timer = C_TimerNewTicker(1, function() self:UpdateTimer() end)
 
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_WHISPER")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_BN_WHISPER")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_GUILD")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_PARTY")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_PARTY_LEADER")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_RAID")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_RAID_LEADER")
-		self.AFKMode.chat:RegisterEvent("CHAT_MSG_CHANNEL")
-		if wowVersion == "retail" then
-			self.AFKMode.chat:RegisterEvent("CHAT_MSG_COMMUNITIES_CHANNEL")
+		if self.options.hidechat then
+			self.AFKMode.chat:UnregisterAllEvents()
+			self.AFKMode.chat:Clear()
+		else
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_WHISPER")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_BN_WHISPER")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_GUILD")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_PARTY")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_PARTY_LEADER")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_RAID")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_RAID_LEADER")
+			self.AFKMode.chat:RegisterEvent("CHAT_MSG_CHANNEL")
+
+			if wowVersion == "retail" then
+				self.AFKMode.chat:RegisterEvent("CHAT_MSG_COMMUNITIES_CHANNEL")
+			end
 		end
 
 		self.isAFK = true
-	elseif(self.isAFK) then
+	elseif not status and self.isAFK then
 		_G.UIParent:Show()
 		self.AFKMode:Hide()
 		MoveViewLeftStop();
@@ -952,8 +985,8 @@ function AFKS:SetAFK(status)
 		self.AFKMode.chat:UnregisterAllEvents()
 		self.AFKMode.chat:Clear()
 		if wowVersion == "retail" and _G.PVEFrame:IsShown() then --odd bug, frame is blank
-			PVEFrame_ToggleFrame()
-			PVEFrame_ToggleFrame()
+			--PVEFrame_ToggleFrame()
+			--PVEFrame_ToggleFrame()
 		end
 
 		self.isAFK = false
