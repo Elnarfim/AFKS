@@ -6,7 +6,16 @@ SLASH_AFKSCampToggle2 = "/캠핑"
 
 -- Variables
 AFKS_NOGUILD = "길드 없음"
-AFKS_DATEFORMAT = "%d년 %d월 %d일\n%s\n\n%s"
+AFKS_DATEFORMAT = "%d년 %d월 %d일\n%s"
+AFKS_WEEKDAYS = {
+	"일요일",
+	"월요일",
+	"화요일",
+	"수요일",
+	"목요일",
+	"금요일",
+	"토요일",
+}
 
 -- Options
 AFKS_ENABLED_TEXT = "활성화"

@@ -14,82 +14,36 @@ elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
 end
 
+local eastasia = false
+
+if GetLocale() == "koKR" or GetLocale() == "zhCN" or GetLocale() == "zhTW" then
+	eastasia = true
+end
+
 --Cache global variables
 --Lua functions
-local _G = _G
-local tostring, pcall = tostring, pcall
-local floor = floor
-local format, strsub, gsub = format, strsub, gsub
-local tonumber = tonumber
+--local _G = _G
+--local tostring, pcall = tostring, pcall
+--local floor = floor
+--local format, strsub, gsub = format, strsub, gsub
+--local tonumber = tonumber
 --WoW API / Variables
-local CloseAllWindows = CloseAllWindows
-local CreateFrame = CreateFrame
-local GetBattlefieldStatus = GetBattlefieldStatus
-local GetGuildInfo = GetGuildInfo
-local GetTime = GetTime
-local InCombatLockdown = InCombatLockdown
-local IsInGuild = IsInGuild
-local IsShiftKeyDown = IsShiftKeyDown
-local MoveViewLeftStart = MoveViewLeftStart
-local MoveViewLeftStop = MoveViewLeftStop
-local PVEFrame_ToggleFrame = PVEFrame_ToggleFrame
-local RemoveExtraSpaces = RemoveExtraSpaces
-local Screenshot = Screenshot
-local SetCVar = SetCVar
-local UnitFactionGroup = UnitFactionGroup
-local UnitIsAFK = UnitIsAFK
-
-local GetLocale = GetLocale
-local IsResting = IsResting
-local GetZonePVPInfo = GetZonePVPInfo
-local UnitClass = UnitClass
-local UnitRace = UnitRace
-local GetColoredName = GetColoredName
-local GetScreenHeight = GetScreenHeight
-local GetScreenWidth = GetScreenWidth
-local GetPhysicalScreenSize = GetPhysicalScreenSize
-local GetMonitorAspectRatio = GetMonitorAspectRatio
-local GetExpansionDisplayInfo = GetExpansionDisplayInfo
-local GetExpansionLevel = GetExpansionLevel
-local C_TimerNewTimer, C_TimerNewTicker, C_TimerAfter = C_Timer.NewTimer, C_Timer.NewTicker, C_Timer.After
-local GameTime_GetLocalTime = GameTime_GetLocalTime
+--local GetBattlefieldStatus = GetBattlefieldStatus
+--local GetGuildInfo = GetGuildInfo
+--local InCombatLockdown = InCombatLockdown
+--local IsInGuild = IsInGuild
+--local PVEFrame_ToggleFrame = PVEFrame_ToggleFrame
+--local UnitFactionGroup = UnitFactionGroup
+--local UnitIsAFK = UnitIsAFK
+--local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 
 local ChatType_Info = _G.ChatTypeInfo
 
-local ChatHistory_GetAccessID = ChatHistory_GetAccessID
-local Chat_GetChatCategory = Chat_GetChatCategory
-local ChatFrame_GetMobileEmbeddedTexture = ChatFrame_GetMobileEmbeddedTexture
-
--- APIs for Retail or Classic only
-local C_PetBattles_IsInBattle
-local C_Texture_GetAtlasInfo
-local C_UnitAuras_GetPlayerAuraBySpellID
-local C_DateAndTime_GetCurrentCalendarTime
-local C_Calendar_GetNumDayEvents
-local C_Calendar_GetDayEvent
-local C_Club_GetStreamInfo
-local C_Club_GetClubInfo
-local C_TradeSkillUI_IsRecipeRepeating
-
-if wowVersion ~= "classic" then
-	C_DateAndTime_GetCurrentCalendarTime = C_DateAndTime.GetCurrentCalendarTime
-end
-
-if wowVersion == "retail" then
-	C_PetBattles_IsInBattle = C_PetBattles and C_PetBattles.IsInBattle 
-	C_Texture_GetAtlasInfo = C_Texture.GetAtlasInfo
-	C_UnitAuras_GetPlayerAuraBySpellID = C_UnitAuras.GetPlayerAuraBySpellID
-	C_Calendar_GetNumDayEvents = C_Calendar.GetNumDayEvents
-	C_Calendar_GetDayEvent = C_Calendar.GetDayEvent
-	C_Club_GetStreamInfo = C_Club.GetStreamInfo
-	C_Club_GetClubInfo = C_Club.GetClubInfo
-	C_TradeSkillUI_IsRecipeRepeating = C_TradeSkillUI.IsRecipeRepeating
-	--C_Covenants_GetCovenantData = C_Covenants.GetCovenantData
-	--C_Covenants_GetActiveCovenantID = C_Covenants.GetActiveCovenantID
-end
-
-local MovieFrame = _G.MovieFrame
-local CinematicFrame = _G.CinematicFrame
+--local ChatHistory_GetAccessID = ChatHistory_GetAccessID
+--local Chat_GetChatCategory = Chat_GetChatCategory
+--local ChatFrame_GetMobileEmbeddedTexture = ChatFrame_GetMobileEmbeddedTexture
+--local MovieFrame = _G.MovieFrame
+--local CinematicFrame = _G.CinematicFrame
 
 local CAMERA_SPEED = 0.035
 local ignoreKeys = {
@@ -152,7 +106,7 @@ function AFKS:OnEvent(event, ...)
 	end
 
 	if event == "VIGNETTE_MINIMAP_UPDATED" and self.isAFK then
-		C_TimerAfter(0.5, function() self:SetAFK(false) end)
+		C_Timer.After(0.5, function() self:SetAFK(false) end)
 	end
 
 	if event == "TALKINGHEAD_REQUESTED" and self.isAFK then
@@ -162,7 +116,7 @@ function AFKS:OnEvent(event, ...)
 	if event == "PLAYER_REGEN_ENABLED" then
 		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
 		if self.isInterrupted then
-			C_TimerAfter(0.5, function() self:SetAFK(false) end)
+			C_Timer.After(0.5, function() self:SetAFK(false) end)
 			self.isInterrupted = false
 		end
 	end
@@ -176,7 +130,10 @@ function AFKS:OnEvent(event, ...)
 		return
 	end
 
-	if UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles_IsInBattle()) then
+	if wowVersion == "classic" and C_GameRules.IsHardcoreActive() and not IsResting() then
+		return
+	end
+	if UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles.IsInBattle()) then
 		return
 	end
 	if (wowVersion == "classic" or wowVersion == "wrath") and GetPVPDesired() and GetZonePVPInfo() ~= "sanctuary" and not IsResting() then
@@ -184,19 +141,20 @@ function AFKS:OnEvent(event, ...)
 	elseif UnitIsPVP("player") and GetZonePVPInfo() ~= "sanctuary" and not IsResting() then
 		return
 	end
-	if InCombatLockdown() or CinematicFrame:IsShown() or MovieFrame:IsShown() then
+	--if UnitIsDeadOrGhost("player") or InCombatLockdown() or CinematicFrame:IsShown() or MovieFrame:IsShown() then
+	if UnitIsDeadOrGhost("player") or InCombatLockdown() then
 		return
 	end
 	if wowVersion == "retail" then
-		if C_TradeSkillUI_IsRecipeRepeating() then
+		if C_TradeSkillUI.IsRecipeRepeating() then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
-			C_TimerAfter(30, function() self:OnEvent() end)
+			C_Timer.After(30, function() self:OnEvent() end)
 			return
 		end
 	else
 		if CastingInfo() then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
-			C_TimerAfter(30, function() self:OnEvent() end)
+			C_Timer.After(30, function() self:OnEvent() end)
 			return
 		end
 	end
@@ -243,7 +201,7 @@ local function OnKeyDown(self, key)
 	else
 		if InCombatLockdown() then return end
 		AFKS:SetAFK(false)
-		C_TimerAfter(60, function() AFKS:OnEvent() end)
+		C_Timer.After(60, function() AFKS:OnEvent() end)
 	end
 end
 
@@ -278,9 +236,9 @@ local function ResolvePrefixChannelName(communityChannel)
 	clubId = tonumber(clubId)
 	streamId = tonumber(streamId)
 
-	local streamInfo = C_Club_GetStreamInfo(clubId, streamId)
+	local streamInfo = C_Club.GetStreamInfo(clubId, streamId)
 	if streamInfo and streamInfo.streamType == 0 then
-		local clubInfo = C_Club_GetClubInfo(clubId)
+		local clubInfo = C_Club.GetClubInfo(clubId)
 		communityName = clubInfo and TruncateToMaxLength(clubInfo.shortName or clubInfo.name, 12) or ""
 	end
 	
@@ -483,12 +441,12 @@ end
 
 local function SetSpecPanel()
 	local SpecIDToBackgroundAtlas = {
-		-- DK
+		-- Death Knight
 		[250] = "talents-background-deathknight-blood",
 		[251] = "talents-background-deathknight-frost",
 		[252] = "talents-background-deathknight-unholy",
 
-		-- DH
+		-- Demon Hunter
 		[577] = "talents-background-demonhunter-havoc",
 		[581] = "talents-background-demonhunter-vengeance",
 
@@ -586,7 +544,7 @@ local function SetSpecPanel()
 			[3] = 40, -- Dwarf
 			[6] = 65, -- Tauren
 			[8] = 10, -- Troll
-			[11] = 20, -- Draenei
+			[11] = 8, -- Draenei
 			[22] = 50, -- Worgen
 			[24] = 65, -- Pandaren (Neutral)
 			[25] = 65, -- Pandaren (Horde)
@@ -602,7 +560,7 @@ local function SetSpecPanel()
 		yoffset = model_yoffset[raceid]
 	end
 	if select(2, UnitClass("player")) == "EVOKER" then
-		if C_UnitAuras_GetPlayerAuraBySpellID(372014) then
+		if C_UnitAuras.GetPlayerAuraBySpellID(372014) then
 			yoffset = -7
 		else
 			yoffset = 70
@@ -611,10 +569,10 @@ local function SetSpecPanel()
 	AFKS.AFKMode.bottom.modelHolder:ClearAllPoints()
 	AFKS.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", AFKS.AFKMode.bottom, "BOTTOMRIGHT", -220, 265 + yoffset)
 
-	local specid = select(1,GetSpecializationInfo(GetSpecialization())) 
+	local specid = select(1, GetSpecializationInfo(GetSpecialization())) 
 	local atlasinfo = specid and SpecIDToBackgroundAtlas[specid]
 	local offset = panel_offset[specid] or 0
-	local info = atlasinfo and C_Texture_GetAtlasInfo(atlasinfo)
+	local info = atlasinfo and C_Texture.GetAtlasInfo(atlasinfo)
 
 	if info then
 		if not AFKS.AFKMode.bottom.specpanel:IsVisible() then
@@ -631,10 +589,70 @@ local function SetSpecPanel()
 	end
 end
 
+local function SetSpecIcon()
+	if UnitLevel("player") >= 10 then
+		if wowVersion == "retail" then
+			local _, _, _, specicon = select(1, GetSpecializationInfo(GetSpecialization())) 
+			if specicon then
+				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+				AFKS.AFKMode.bottom.specicon:Show()
+			else
+				AFKS.AFKMode.bottom.specicon:Hide()
+			end
+		else
+			local primaryTalent
+			local talent_tree = {}
+			for i=1, GetNumTalentTabs() do
+				talent_tree[i] = select(3, GetTalentTabInfo(i))
+			end
+			for k, v in pairs(talent_tree) do
+				if k > 1 and v > talent_tree[k-1] then
+					primaryTalent = k
+				else
+					primaryTalent = 1
+				end
+			end
+			if primaryTalent == 1 and talent_tree[1] == 0 then
+				AFKS.AFKMode.bottom.specicon:Hide()
+				return
+			end
+
+			local specicon = select(2, GetTalentTabInfo(primaryTalent))
+			if specicon then
+				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+				AFKS.AFKMode.bottom.specicon:Show()
+			else
+				AFKS.AFKMode.bottom.specicon:Hide()
+			end
+		end
+	else
+		AFKS.AFKMode.bottom.specicon:Hide()
+	end
+end
+
+local function SetDate()
+	local weekday = date("%A")
+	if eastasia then
+		weekday = AFKS_WEEKDAYS[tonumber(date("%w"))+1]
+	end
+
+	if date("%w") == "6" then -- Saturday
+		weekday = "|cFF2b59FF"..weekday.."|r"
+	elseif date("%w") == "0" then -- Sunday
+		weekday = "|cFFFF2b2b"..weekday.."|r"
+	end
+
+	if eastasia then -- East Asia date format check
+		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%Y"), date("%m"), date("%d"), weekday))
+	else
+		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%b"), date("%d"), date("%Y"), weekday))
+	end
+end
+
 local function GetCalenderSchedule()
-	local today = C_DateAndTime_GetCurrentCalendarTime()
-        for i = 1, C_Calendar_GetNumDayEvents(0, today.monthDay) do
-		local event = C_Calendar_GetDayEvent(0, today.monthDay, i)
+	local today = C_DateAndTime.GetCurrentCalendarTime()
+        for i = 1, C_Calendar.GetNumDayEvents(0, today.monthDay) do
+		local event = C_Calendar.GetDayEvent(0, today.monthDay, i)
 		if event and event.calendarType == "PLAYER" and event.startTime.hour > today.hour then
 			if event.inviteStatus == 2 or event.inviteStatus == 4 then
 				return
@@ -657,30 +675,16 @@ local function GetCalenderSchedule()
 				event.startTime.hour = event.startTime.hour - 12
 			end
 
-			if GetLocale() == "koKR" or GetLocale() == "zhCN" or GetLocale() == "zhTW" then
+			if eastasia then
 				AFKS.AFKMode.bottom.schedule:SetText("("..ampm.." "..event.startTime.hour..":"..minute..") "..event.title)
 			else
-				AFKS.AFKMode.bottom.schedule:SetText(event.title.." in "..ampm.." "..event.startTime.hour..":"..minute)
+				AFKS.AFKMode.bottom.schedule:SetText(event.title.." in "..event.startTime.hour..":"..minute.." "..ampm)
 			end
 			break
 		end
 	end                   
 end
 
---[[
-local function GetWoWLogo()
-	if wowVersion == "classic" then
-		return "Interface\\Glues\\Common\\WOW_Classic-LogoHR"
-	elseif wowVersion == "bcc" then
-		return "Interface\\Glues\\Common\\Glues-WoW-ClassicBurningCrusadeLogo"
-	elseif wowVersion == "wrath" then
-		return 4544489
-	else
-		local expansion = GetExpansionDisplayInfo(GetExpansionLevel())
-		return expansion.logo
-	end
-end
-]]
 local function GetWoWLogo()
 	local expansion
 	if wowVersion == "retail" then
@@ -724,7 +728,7 @@ end
 function AFKS:Init()
 	local logo = GetWoWLogo()
 	local class = select(2, UnitClass("player"))
-	local panelheight = GetScreenHeight() * (1 / 10)
+	local panelheight = GetScreenHeight() * 0.1
 	if panelheight < 102 then -- Adjust to 102.4 in small resolution
 		panelheight = 102.4
 	end
@@ -764,11 +768,7 @@ function AFKS:Init()
 	self.AFKMode.bottom.logo:SetSize(256, 128)
 	self.AFKMode.bottom.logo:SetPoint("CENTER", self.AFKMode.bottom, "CENTER", 0, 25)
 	self.AFKMode.bottom.logo:SetTexture(logo)
-	--[[
-	if wowVersion == "classic" or wowVersion == "bcc" then
-		self.AFKMode.bottom.logo:SetTexCoord(0.125, 0.875, 0.3125, 0.6875)
-	end
-	]]
+
 	local factionGroup = UnitFactionGroup("player")
 	local size, offsetX, offsetY = 140, -20, -16
 	local nameOffsetX, nameOffsetY = -10, -28
@@ -801,36 +801,36 @@ function AFKS:Init()
 	self.AFKMode.bottom.guild:SetPoint("TOPLEFT", self.AFKMode.bottom.name, "BOTTOMLEFT", 0, -6)
 	self.AFKMode.bottom.guild:SetTextColor(0.7, 0.7, 0.7)
 
-	self.AFKMode.bottom.time = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
-	FontTemplate(self.AFKMode.bottom.time, 20, "OUTLINE")
-	self.AFKMode.bottom.time:SetText("00:00")
-	self.AFKMode.bottom.time:SetPoint("TOPLEFT", self.AFKMode.bottom.guild, "BOTTOMLEFT", 0, -6)
-	self.AFKMode.bottom.time:SetTextColor(0.7, 0.7, 0.7)
+	self.AFKMode.bottom.timer = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+	FontTemplate(self.AFKMode.bottom.timer, 20, "OUTLINE")
+	self.AFKMode.bottom.timer:SetText("00:00")
+	self.AFKMode.bottom.timer:SetPoint("TOPLEFT", self.AFKMode.bottom.guild, "BOTTOMLEFT", 0, -6)
+	self.AFKMode.bottom.timer:SetTextColor(0.7, 0.7, 0.7)
 
 	self.AFKMode.bottom.date = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
 	FontTemplate(self.AFKMode.bottom.date, 20, "OUTLINE")
-	self.AFKMode.bottom.date:SetPoint("RIGHT", self.AFKMode.bottom, "RIGHT", -10, 6)
+	self.AFKMode.bottom.date:SetPoint("RIGHT", self.AFKMode.bottom, "RIGHT", -10, 25)
 	self.AFKMode.bottom.date:SetTextColor(0.7, 0.7, 0.7)
 
-	--Use this frame to control position of the model
-	self.AFKMode.bottom.modelHolder = CreateFrame("Frame", nil, self.AFKMode.bottom)
-	self.AFKMode.bottom.modelHolder:SetSize(150, 150)
-	if wowVersion == "retail" then
-		self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 265)
-	else
-		self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 220)
+	self.AFKMode.bottom.time = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+	FontTemplate(self.AFKMode.bottom.time, 20, "OUTLINE")
+	self.AFKMode.bottom.time:SetPoint("CENTER", self.AFKMode.bottom.date, "CENTER", 0, -50)
+	self.AFKMode.bottom.time:SetTextColor(0.7, 0.7, 0.7)
+
+	if wowVersion ~= "classic" then
+		self.AFKMode.bottom.specicon = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
+		self.AFKMode.bottom.specicon:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, -2)
+		self.AFKMode.bottom.specicon:SetSize(25, 25)
 	end
 
 	if wowVersion == "retail" then
 		local yoffset = 0
-		if select(2, GetPhysicalScreenSize()) == 2160 then -- 4K resolution offset
+		local width, height = GetPhysicalScreenSize()
+		if width == 3840 and height == 2160 then -- 4K resolution offset
 			yoffset = 20
+		elseif width == 2560 and height == 1080 then -- WFHD resolution offset
+			yoffset = 8
 		end
-
-		--[[
-		self.AFKMode.bottom.covenant = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
-		self.AFKMode.bottom.covenant:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, 0)
-		]]
 
 		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
@@ -849,6 +849,15 @@ function AFKS:Init()
 		self.AFKMode.bottom.calendaricon:SetSize(40, 40)
 	end
 
+	--Use this frame to control position of the model
+	self.AFKMode.bottom.modelHolder = CreateFrame("Frame", nil, self.AFKMode.bottom)
+	self.AFKMode.bottom.modelHolder:SetSize(150, 150)
+	if wowVersion == "retail" then
+		self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 265)
+	else
+		self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 220)
+	end
+
 	self.AFKMode.bottom.model = CreateFrame("PlayerModel", "AFKSPlayerModel", self.AFKMode.bottom.modelHolder)
 	self.AFKMode.bottom.model:SetPoint("CENTER", self.AFKMode.bottom.modelHolder, "CENTER")
 	self.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
@@ -859,7 +868,7 @@ function AFKS:Init()
 		if(timePassed > self.duration) and self.isIdle ~= true then
 			self:SetAnimation(0)
 			self.isIdle = true
-			AFKS.animTimer = C_TimerNewTimer(self.idleDuration, LoopAnimations)
+			AFKS.animTimer = C_Timer.NewTimer(self.idleDuration, LoopAnimations)
 		end
 	end)
 
@@ -885,27 +894,14 @@ do
 end
 
 function AFKS:UpdateTimer()
+	self.AFKMode.bottom.time:SetText(format("%s", GameTime_GetLocalTime(true)))
+
 	local curtime = GetTime() - self.startTime
-	if wowVersion == "classic" then
-		self.AFKMode.bottom.date:SetText(format("%s", GameTime_GetLocalTime(true)))
-	else
-		local today = C_DateAndTime_GetCurrentCalendarTime()
-		local _, _, month, day, year = today.hour, today.minute, today.month, today.monthDay, today.year
-		local weekday = _G.CALENDAR_WEEKDAY_NAMES[today.weekday]
+	self.AFKMode.bottom.timer:SetText(format("%02d:%02d", floor(curtime/60), curtime % 60))
 
-		if today.weekday == 7 then
-			weekday = "|cFF2b59FF"..weekday.."|r"
-		elseif today.weekday == 1 then
-			weekday = "|cFFFF2b2b"..weekday.."|r"
-		end
-
-		if GetLocale() == "koKR" or GetLocale() == "zhCN" or GetLocale() == "zhTW" then -- East Asia date format check
-			self.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, year, month, day, weekday, GameTime_GetLocalTime(true)))
-		else
-			self.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, month, day, year, weekday, GameTime_GetLocalTime(true)))
-		end
+	if date("%H") == "23" and date("%M") == "59" and tonumber(date("%S")) >= 55 then
+		SetDate()
 	end
-	self.AFKMode.bottom.time:SetText(format("%02d:%02d", floor(curtime/60), curtime % 60))
 end
 
 function AFKS:SetAFK(status)
@@ -915,6 +911,9 @@ function AFKS:SetAFK(status)
 		CloseAllWindows()
 		_G.UIParent:Hide()
 
+		SetDate()
+		self.AFKMode.bottom.time:SetText(format("%s", GameTime_GetLocalTime(true)))
+
 		if(IsInGuild()) then
 			local guildName, guildRankName = GetGuildInfo("player")
 			self.AFKMode.bottom.guild:SetText(format("%s-%s", guildName, guildRankName))
@@ -922,22 +921,11 @@ function AFKS:SetAFK(status)
 			self.AFKMode.bottom.guild:SetText(AFKS_NOGUILD)
 		end
 
+		if wowVersion ~= "classic" then
+			SetSpecIcon()
+		end
+
 		if wowVersion == "retail" then
-			--[[
-			if GetExpansionLevel() == 8 then
-				local garrisonType = _G.C_Garrison.GetLandingPageGarrisonType()
-				if (garrisonType == Enum.GarrisonType.Type_9_0) then
-					local covenantData = C_Covenants_GetCovenantData(C_Covenants_GetActiveCovenantID())
-					if covenantData and covenantData.textureKit then
-						local info = C_Texture_GetAtlasInfo("shadowlands-landingbutton-"..covenantData.textureKit.."-up")
-						self.AFKMode.bottom.covenant:SetAtlas("shadowlands-landingbutton-"..covenantData.textureKit.."-up", true)
-						self.AFKMode.bottom.covenant:SetSize(info and math.floor(info.width * 0.6) or 0, info and math.floor(info.height * 0.6) or 0)
-					end
-				end
-			else
-				self.AFKMode.bottom.covenant:Hide()
-			end
-			]]
 			SetSpecPanel()
 			GetCalenderSchedule()
 		end
@@ -950,7 +938,7 @@ function AFKS:SetAFK(status)
 		self.AFKMode.bottom.model:SetAnimation(67)
 		self.AFKMode.bottom.model.idleDuration = 40
 		self.startTime = GetTime()
-		self.timer = C_TimerNewTicker(1, function() self:UpdateTimer() end)
+		self.timer = C_Timer.NewTicker(1, function() self:UpdateTimer() end)
 
 		if self.options.hidechat then
 			self.AFKMode.chat:UnregisterAllEvents()
@@ -980,7 +968,7 @@ function AFKS:SetAFK(status)
 		if self.animTimer then
 			self.animTimer:Cancel()
 		end
-		self.AFKMode.bottom.time:SetText("00:00")
+		self.AFKMode.bottom.timer:SetText("00:00")
 
 		self.AFKMode.chat:UnregisterAllEvents()
 		self.AFKMode.chat:Clear()
