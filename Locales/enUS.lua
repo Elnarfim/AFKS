@@ -4,7 +4,7 @@ AFKS_CAMPOFF = "\124cFFFFEA00CAMPING OFF\124r"
 
 -- Variables
 AFKS_NOGUILD = "No Guild"
-AFKS_DATEFORMAT = "%d %d %d\n%s"
+AFKS_DATEFORMAT = "%s %d %d\n%s"
 
 -- Options
 AFKS_ENABLED_TEXT = "Enabled"

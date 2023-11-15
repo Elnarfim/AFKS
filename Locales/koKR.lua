@@ -1,4 +1,4 @@
-if _G.GetLocale() ~= "koKR" then return end
+if GetLocale() ~= "koKR" then return end
 -- Slash Command
 AFKS_CAMPON = "\124cFFFFEA00캠핑 ON\124r"
 AFKS_CAMPOFF = "\124cFFFFEA00캠핑 OFF\124r"

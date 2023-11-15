@@ -14,10 +14,10 @@ elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
 end
 
-local eastasia = false
+local eastasian = false
 
 if GetLocale() == "koKR" or GetLocale() == "zhCN" or GetLocale() == "zhTW" then
-	eastasia = true
+	eastasian = true
 end
 
 --Cache global variables
@@ -37,11 +37,9 @@ end
 --local UnitIsAFK = UnitIsAFK
 --local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 
-local ChatType_Info = _G.ChatTypeInfo
-
---local ChatHistory_GetAccessID = ChatHistory_GetAccessID
---local Chat_GetChatCategory = Chat_GetChatCategory
---local ChatFrame_GetMobileEmbeddedTexture = ChatFrame_GetMobileEmbeddedTexture
+--local ChatHistory_GetAccessID = _G.ChatHistory_GetAccessID
+--local Chat_GetChatCategory = _G.Chat_GetChatCategory
+--local ChatFrame_GetMobileEmbeddedTexture = _G.ChatFrame_GetMobileEmbeddedTexture
 --local MovieFrame = _G.MovieFrame
 --local CinematicFrame = _G.CinematicFrame
 
@@ -141,7 +139,6 @@ function AFKS:OnEvent(event, ...)
 	elseif UnitIsPVP("player") and GetZonePVPInfo() ~= "sanctuary" and not IsResting() then
 		return
 	end
-	--if UnitIsDeadOrGhost("player") or InCombatLockdown() or CinematicFrame:IsShown() or MovieFrame:IsShown() then
 	if UnitIsDeadOrGhost("player") or InCombatLockdown() then
 		return
 	end
@@ -229,20 +226,15 @@ local function TruncateToMaxLength(text, maxLength)
 	return text
 end
 
-local function ResolvePrefixChannelName(communityChannel)
+local function GetCommunityName(clubId, streamId)
 	local communityName = ""
-	local prefix, channelCode = communityChannel:match("(%d+. )(.*)")
-	local clubId, streamId = channelCode:match("(%d+)%:(%d+)")
-	clubId = tonumber(clubId)
-	streamId = tonumber(streamId)
-
 	local streamInfo = C_Club.GetStreamInfo(clubId, streamId)
 	if streamInfo and streamInfo.streamType == 0 then
 		local clubInfo = C_Club.GetClubInfo(clubId)
 		communityName = clubInfo and TruncateToMaxLength(clubInfo.shortName or clubInfo.name, 12) or ""
 	end
 	
-	return prefix..communityName
+	return communityName
 end
 
 --[[
@@ -279,7 +271,8 @@ end
 local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14)
 	local coloredName = GetColoredName(event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14);
 	local type = strsub(event, 10)
-	local info = ChatType_Info[type]
+	local info = _G.ChatTypeInfo[type]
+
 --[[
 	if(event == "CHAT_MSG_BN_WHISPER") then
 		coloredName = GetBNFriendColor(arg2, arg13)
@@ -287,7 +280,7 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 ]]
 	arg1 = RemoveExtraSpaces(arg1)
 
-	local chatGroup = Chat_GetChatCategory(type)
+	local chatGroup = _G.Chat_GetChatCategory(type)
 	local chatTarget, body
 	if ( chatGroup == "BN_CONVERSATION" ) then
 		chatTarget = tostring(arg8)
@@ -308,7 +301,7 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 
 	local message = arg1
 	if ( arg14 ) then	--isMobile
-		message = ChatFrame_GetMobileEmbeddedTexture(info.r, info.g, info.b)..message
+		message = _G.ChatFrame_GetMobileEmbeddedTexture(info.r, info.g, info.b)..message
 	end
 	
 	--Escape any % characters, as it may otherwise cause an "invalid option in format" error in the next step
@@ -320,18 +313,26 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 		print("Error:", type, message, _G["CHAT_"..type.."_GET"])
 	end
 	if event == "CHAT_MSG_COMMUNITIES_CHANNEL" then
-		body = "[" .. ResolvePrefixChannelName(arg4) .. "] " .. body
+		local prefix, channelCode = arg4:match("(%d+. )(.*)")
+		local clubId, streamId = channelCode:match("(%d+)%:(%d+)")
+		clubId = tonumber(clubId)
+		streamId = tonumber(streamId)
+
+		type = _G.Chat_GetCommunitiesChannel(clubId, streamId)
+		info = _G.ChatTypeInfo[type]
+		body = "[" .. prefix .. GetCommunityName(clubId, streamId) .. "] " .. body
 	end
 
 	if event == "CHAT_MSG_CHANNEL" then
 		if arg7 == 1 or arg7 == 2 or arg7 == 22 or arg7 == 26 or arg7 == 42 then
 			return
 		end
+		info = _G.ChatTypeInfo["CHANNEL"..arg8]
 		body = "[" .. arg4 .. "] " .. body
 	end
 
-	local accessID = ChatHistory_GetAccessID(chatGroup, chatTarget)
-	local typeID = ChatHistory_GetAccessID(type, chatTarget, arg12 == "" and arg13 or arg12)
+	local accessID = _G.ChatHistory_GetAccessID(chatGroup, chatTarget)
+	local typeID = _G.ChatHistory_GetAccessID(type, chatTarget, arg12 == "" and arg13 or arg12)
 
 	self:AddMessage(body, info.r, info.g, info.b, info.id, false, accessID, typeID)
 end
@@ -631,19 +632,20 @@ local function SetSpecIcon()
 end
 
 local function SetDate()
-	local weekday = date("%A")
-	if eastasia then
+	local weekday = date("%a")
+	if eastasian then
 		weekday = AFKS_WEEKDAYS[tonumber(date("%w"))+1]
 	end
 
-	if date("%w") == "6" then -- Saturday
+	if date("%w") == "6" then -- Sat
 		weekday = "|cFF2b59FF"..weekday.."|r"
-	elseif date("%w") == "0" then -- Sunday
+	elseif date("%w") == "0" then -- Sun
 		weekday = "|cFFFF2b2b"..weekday.."|r"
 	end
 
-	if eastasia then -- East Asia date format check
-		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%Y"), date("%m"), date("%d"), weekday))
+	if eastasian then -- East Asian date format check
+		--AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%Y"), date("%m"), date("%d"), weekday))
+		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%b"), date("%d"), date("%Y"), weekday))
 	else
 		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%b"), date("%d"), date("%Y"), weekday))
 	end
@@ -675,7 +677,7 @@ local function GetCalenderSchedule()
 				event.startTime.hour = event.startTime.hour - 12
 			end
 
-			if eastasia then
+			if eastasian then
 				AFKS.AFKMode.bottom.schedule:SetText("("..ampm.." "..event.startTime.hour..":"..minute..") "..event.title)
 			else
 				AFKS.AFKMode.bottom.schedule:SetText(event.title.." in "..event.startTime.hour..":"..minute.." "..ampm)
@@ -683,6 +685,20 @@ local function GetCalenderSchedule()
 			break
 		end
 	end                   
+end
+
+local function GetBGYOffset()
+	local yoffset = 0
+	local width, height = GetPhysicalScreenSize()
+	if width == 3840 and height == 2160 then -- 4K resolution offset
+		yoffset = 20
+	elseif width == 2560 and height == 1080 then -- WFHD resolution offset
+		yoffset = 8
+	elseif width == 1920 and height == 1080 then -- FHD resolution offset
+		yoffset = 5
+	end
+
+	return yoffset
 end
 
 local function GetWoWLogo()
@@ -824,13 +840,7 @@ function AFKS:Init()
 	end
 
 	if wowVersion == "retail" then
-		local yoffset = 0
-		local width, height = GetPhysicalScreenSize()
-		if width == 3840 and height == 2160 then -- 4K resolution offset
-			yoffset = 20
-		elseif width == 2560 and height == 1080 then -- WFHD resolution offset
-			yoffset = 8
-		end
+		local yoffset = GetBGYOffset()
 
 		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
@@ -884,12 +894,21 @@ do
 
 	AFKS:Init()
 
+	hooksecurefunc ("LFGListInviteDialog_Show", function()
+		if not InCombatLockdown() then
+			AFKS:SetAFK(false)
+		end
+	end)
+
 	if wowVersion == "retail" then
-		hooksecurefunc ("LFGListInviteDialog_Show", function()
-			if not InCombatLockdown() then
-				AFKS:SetAFK(false)
-			end
-		end)
+		AddonCompartmentFrame:RegisterAddon({
+			text = "AFKS",
+			icon = "Interface\\AddOns\\AFKS\\AFKS-icon.tga",
+			notCheckable = true,
+			func = function()
+				_G.Settings.OpenToCategory("AFKS")
+			end,
+		})
 	end
 end
 

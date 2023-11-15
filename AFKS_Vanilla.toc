@@ -1,6 +1,6 @@
 ## Interface: 11404
 ## Author: Elnarfim
-## Version: 1.72
+## Version: 1.81
 ## Title: AFKS - AFK Screen
 ## Title-koKR: AFKS - 자리비움 스크린
 ## Notes: an Enhanced standalone version of AFK Screen from Elv UI
