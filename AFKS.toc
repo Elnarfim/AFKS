@@ -1,10 +1,10 @@
 ## Interface: 100200
 ## Author: Elnarfim
-## Version: 1.81
+## Version: 1.82
 ## IconTexture: Interface\AddOns\AFKS\AFKS-icon.tga
 ## Title: AFKS - AFK Screen
 ## Title-koKR: AFKS - 자리비움 스크린
-## Notes: an Enhanced standalone version of AFK Screen from ElvUI
+## Notes: an Enhanced standalone version of AFK Screen module of Elv UI
 ## Notes-koKR: 향상된 ElvUI의 자리 비움 스크린
 ## SavedVariables: AFKS_DB
 

@@ -644,8 +644,7 @@ local function SetDate()
 	end
 
 	if eastasian then -- East Asian date format check
-		--AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%Y"), date("%m"), date("%d"), weekday))
-		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%b"), date("%d"), date("%Y"), weekday))
+		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%Y"), date("%m"), date("%d"), weekday))
 	else
 		AFKS.AFKMode.bottom.date:SetText(format(AFKS_DATEFORMAT, date("%b"), date("%d"), date("%Y"), weekday))
 	end
@@ -894,11 +893,14 @@ do
 
 	AFKS:Init()
 
-	hooksecurefunc ("LFGListInviteDialog_Show", function()
-		if not InCombatLockdown() then
-			AFKS:SetAFK(false)
-		end
-	end)
+	local tocVersion = select(4, GetBuildInfo())
+	if tocVersion >= 11500 then
+		hooksecurefunc ("LFGListInviteDialog_Show", function()
+			if not InCombatLockdown() then
+				AFKS:SetAFK(false)
+			end
+		end)
+	end
 
 	if wowVersion == "retail" then
 		AddonCompartmentFrame:RegisterAddon({
@@ -920,6 +922,9 @@ function AFKS:UpdateTimer()
 
 	if date("%H") == "23" and date("%M") == "59" and tonumber(date("%S")) >= 55 then
 		SetDate()
+		if wowVersion == "retail" then
+			GetCalenderSchedule()
+		end
 	end
 end
 
