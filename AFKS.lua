@@ -22,28 +22,32 @@ end
 
 --Cache global variables
 --Lua functions
---local _G = _G
---local tostring, pcall = tostring, pcall
---local floor = floor
---local format, strsub, gsub = format, strsub, gsub
---local tonumber = tonumber
+local _G = _G
+local tostring, pcall = tostring, pcall
+local floor = floor
+local format, strsub, gsub = format, strsub, gsub
+local tonumber = tonumber
 --WoW API / Variables
---local GetBattlefieldStatus = GetBattlefieldStatus
---local GetGuildInfo = GetGuildInfo
---local InCombatLockdown = InCombatLockdown
---local IsInGuild = IsInGuild
---local PVEFrame_ToggleFrame = PVEFrame_ToggleFrame
---local UnitFactionGroup = UnitFactionGroup
---local UnitIsAFK = UnitIsAFK
---local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local CreateFrame = _G.CreateFrame
+--[[
+local GetBattlefieldStatus = GetBattlefieldStatus
+local GetGuildInfo = GetGuildInfo
+local InCombatLockdown = InCombatLockdown
+local IsInGuild = IsInGuild
+local UnitFactionGroup = UnitFactionGroup
+local UnitIsAFK = UnitIsAFK
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+]]
 
---local ChatHistory_GetAccessID = _G.ChatHistory_GetAccessID
---local Chat_GetChatCategory = _G.Chat_GetChatCategory
---local ChatFrame_GetMobileEmbeddedTexture = _G.ChatFrame_GetMobileEmbeddedTexture
---local MovieFrame = _G.MovieFrame
---local CinematicFrame = _G.CinematicFrame
+--WoW Functions / Frames
+--[[
+local ChatHistory_GetAccessID = _G.ChatHistory_GetAccessID
+local Chat_GetChatCategory = _G.Chat_GetChatCategory
+local ChatFrame_GetMobileEmbeddedTexture = _G.ChatFrame_GetMobileEmbeddedTexture
+local PVEFrame_ToggleFrame = PVEFrame_ToggleFrame
+]]
+local UIParent = _G.UIParent
 
-local CAMERA_SPEED = 0.035
 local ignoreKeys = {
 	LALT = true,
 	LSHIFT = true,
@@ -157,7 +161,7 @@ function AFKS:OnEvent(event, ...)
 	end
 	
 	if UnitIsAFK("player") and not self.isAFK then
-		if wowVersion == "retail" and _G.PVEFrame and _G.PVEFrame:IsShown() or isCamp then return end
+		if wowVersion == "retail" and PVEFrame and PVEFrame:IsShown() or isCamp then return end
 		self:SetAFK(true)
 	elseif not UnitIsAFK("player") then
 		self:SetAFK(false)
@@ -202,6 +206,29 @@ local function OnKeyDown(self, key)
 	end
 end
 
+local function Chat_MouseDown(self, button)
+	if button == "RightButton" then
+		AFKS.AFKMode.chatminbar.minimized = true
+		AFKS.AFKMode.chatminbar.unreadwhisper = 0
+		AFKS.AFKMode.chatminbar.unreadbnet = 0
+		AFKS.AFKMode.chatminbar.unreadchannel = 0
+		AFKS.AFKMode.chatminbar.unreadguild = 0
+		AFKS.AFKMode.chatminbar.unreadgroup = 0
+
+		local text = format(AFKS_CHATBAR_TEXT, 0, 0, 0)
+		if IsInGuild() then
+			text = text.." "..format(AFKS_CHATBAR_GUILD, 0)
+		end
+		AFKS.AFKMode.chatminbar.title:SetText(text)
+		AFKS.AFKMode.chatminbar.title:Show()
+		AFKS.AFKMode.chatminbar:SetBackdropColor(.2, .2, .2, .8)
+		self:Hide()
+	elseif button == "LeftButton" and IsShiftKeyDown() then
+		self:ClearAllPoints()
+		self:SetPoint("BOTTOMLEFT", AFKSFrame, "BOTTOMLEFT", 4, 120)
+	end
+end
+
 local function Chat_OnMouseWheel(self, delta)
 	if delta == 1 then
 		if IsShiftKeyDown() then
@@ -215,6 +242,15 @@ local function Chat_OnMouseWheel(self, delta)
 		else
 			self:ScrollDown()
 		end
+	end
+end
+
+local function ChatMinBar_MouseDown(self, button)
+	if button == "LeftButton" or button == "RightButton" then
+		AFKS.AFKMode.chatminbar.minimized = false
+		AFKS.AFKMode.chatminbar.title:Hide()
+		AFKS.AFKMode.chatminbar:SetBackdropColor(.2, .2, .2, 0)
+		AFKS.AFKMode.chat:Show()
 	end
 end
 
@@ -293,10 +329,19 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 	end
 
 	local playerLink
-	if ( type ~= "BN_WHISPER" and type ~= "BN_CONVERSATION" ) then
-		playerLink = "|Hplayer:"..arg2..":"..arg11..":"..chatGroup..(chatTarget and ":"..chatTarget or "").."|h"
+	local texture = ""
+	if type == "BN_WHISPER" then
+		local accountInfo = C_BattleNet.GetAccountInfoByID(arg13)
+		if accountInfo and accountInfo.gameAccountInfo.clientProgram ~= "" then
+			texture = BNet_GetClientEmbeddedAtlas(accountInfo.gameAccountInfo.clientProgram, 14, 14)
+		end
+		playerLink = "|HBNplayer:"..texture..arg2..":"..arg13..":"..arg11..":"..chatGroup..(chatTarget and ":"..chatTarget or "").."|h"
+		if AFKS.AFKMode.chatminbar.minimized then
+			AFKS.AFKMode.chatminbar.unreadbnet = AFKS.AFKMode.chatminbar.unreadbnet + 1
+			--print("bnet:"..AFKS.AFKMode.chatminbar.unreadbnet)
+		end
 	else
-		playerLink = "|HBNplayer:"..arg2..":"..arg13..":"..arg11..":"..chatGroup..(chatTarget and ":"..chatTarget or "").."|h"
+		playerLink = "|Hplayer:"..arg2..":"..arg11..":"..chatGroup..(chatTarget and ":"..chatTarget or "").."|h"
 	end
 
 	local message = arg1
@@ -312,7 +357,7 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 	if not success then
 		print("Error:", type, message, _G["CHAT_"..type.."_GET"])
 	end
-	if event == "CHAT_MSG_COMMUNITIES_CHANNEL" then
+	if type == "COMMUNITIES_CHANNEL" then
 		local prefix, channelCode = arg4:match("(%d+. )(.*)")
 		local clubId, streamId = channelCode:match("(%d+)%:(%d+)")
 		clubId = tonumber(clubId)
@@ -320,19 +365,40 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 
 		type = _G.Chat_GetCommunitiesChannel(clubId, streamId)
 		info = _G.ChatTypeInfo[type]
-		body = "[" .. prefix .. GetCommunityName(clubId, streamId) .. "] " .. body
-	end
-
-	if event == "CHAT_MSG_CHANNEL" then
+		body = "[" .. GetCommunityName(clubId, streamId) .. "] " .. body
+		if AFKS.AFKMode.chatminbar.minimized then
+			AFKS.AFKMode.chatminbar.unreadchannel = AFKS.AFKMode.chatminbar.unreadchannel + 1
+		end
+	elseif type == "CHANNEL" then
 		if arg7 == 1 or arg7 == 2 or arg7 == 22 or arg7 == 26 or arg7 == 42 then
 			return
 		end
-		info = _G.ChatTypeInfo["CHANNEL"..arg8]
+		info = _G.ChatTypeInfo[type..arg8]
 		body = "[" .. arg4 .. "] " .. body
+		if AFKS.AFKMode.chatminbar.minimized then
+			AFKS.AFKMode.chatminbar.unreadchannel = AFKS.AFKMode.chatminbar.unreadchannel + 1
+		end
 	end
 
 	local accessID = _G.ChatHistory_GetAccessID(chatGroup, chatTarget)
 	local typeID = _G.ChatHistory_GetAccessID(type, chatTarget, arg12 == "" and arg13 or arg12)
+
+	if AFKS.AFKMode.chatminbar.minimized then
+		if type == "WHISPER" then
+			AFKS.AFKMode.chatminbar.unreadwhisper = AFKS.AFKMode.chatminbar.unreadwhisper + 1
+			--print("whisper:"..AFKS.AFKMode.chatminbar.unreadwhisper)
+		--elseif type == "BN_WHISPER" then
+		--	AFKS.AFKMode.chatminbar.unreadbnet = AFKS.AFKMode.chatminbar.unreadbnet + 1
+		elseif type == "GUILD" then
+			AFKS.AFKMode.chatminbar.unreadguild = AFKS.AFKMode.chatminbar.unreadguild + 1
+		end
+		local text = format(AFKS_CHATBAR_TEXT, AFKS.AFKMode.chatminbar.unreadwhisper, AFKS.AFKMode.chatminbar.unreadbnet, AFKS.AFKMode.chatminbar.unreadchannel)
+		if IsInGuild() then
+			text = text.." "..format(AFKS_CHATBAR_GUILD, AFKS.AFKMode.chatminbar.unreadguild)
+		end
+
+		AFKS.AFKMode.chatminbar.title:SetText(text)
+	end
 
 	self:AddMessage(body, info.r, info.g, info.b, info.id, false, accessID, typeID)
 end
@@ -543,6 +609,7 @@ local function SetSpecPanel()
 	local model_yoffset = {
 			[1] = 30, -- Human
 			[3] = 40, -- Dwarf
+			[5] = 10, -- Undead
 			[6] = 65, -- Tauren
 			[8] = 10, -- Troll
 			[11] = 8, -- Draenei
@@ -552,7 +619,7 @@ local function SetSpecPanel()
 			[26] = 65, -- Pandaren (Alliance)
 			[28] = 65, -- Highmountain
 			[30] = 20, -- Lightforged
-			[31] = 10, -- Zandalari
+			[31] = 5, -- Zandalari
 	}
 
 	local yoffset = 0
@@ -634,7 +701,17 @@ end
 local function SetDate()
 	local weekday = date("%a")
 	if eastasian then
-		weekday = AFKS_WEEKDAYS[tonumber(date("%w"))+1]
+		local localized_weekday = {
+			_G.WEEKDAY_SUNDAY,
+			_G.WEEKDAY_MONDAY,
+			_G.WEEKDAY_TUESDAY,
+			_G.WEEKDAY_WEDNESDAY,
+			_G.WEEKDAY_THURSDAY,
+			_G.WEEKDAY_FRIDAY,
+			_G.WEEKDAY_SATURDAY,
+		}
+
+		weekday = localized_weekday[tonumber(date("%w"))+1]
 	end
 
 	if date("%w") == "6" then -- Sat
@@ -673,7 +750,9 @@ local function GetCalenderSchedule()
 				ampm = _G.TIMEMANAGER_AM
 			else
 				ampm = _G.TIMEMANAGER_PM
-				event.startTime.hour = event.startTime.hour - 12
+				if event.startTime.hour > 12 then
+					event.startTime.hour = event.startTime.hour - 12
+				end
 			end
 
 			if eastasian then
@@ -750,8 +829,8 @@ function AFKS:Init()
 
 	self.AFKMode = CreateFrame("Frame", "AFKSFrame")
 	self.AFKMode:SetFrameLevel(1)
-	self.AFKMode:SetScale(_G.UIParent:GetScale())
-	self.AFKMode:SetAllPoints(_G.UIParent)
+	self.AFKMode:SetScale(UIParent:GetScale())
+	self.AFKMode:SetAllPoints(UIParent)
 	self.AFKMode:Hide()
 	self.AFKMode:EnableKeyboard(true)
 	self.AFKMode:SetScript("OnKeyDown", OnKeyDown)
@@ -762,6 +841,7 @@ function AFKS:Init()
 	FontTemplate(self.AFKMode.chat, 18)
 	self.AFKMode.chat:SetJustifyH("LEFT")
 	self.AFKMode.chat:SetMaxLines(500)
+	self.AFKMode.chat:SetClampedToScreen(true)
 	self.AFKMode.chat:EnableMouseWheel(true)
 	self.AFKMode.chat:SetFading(false)
 	self.AFKMode.chat:SetMovable(true)
@@ -769,6 +849,7 @@ function AFKS:Init()
 	self.AFKMode.chat:RegisterForDrag("LeftButton")
 	self.AFKMode.chat:SetScript("OnDragStart", self.AFKMode.chat.StartMoving)
 	self.AFKMode.chat:SetScript("OnDragStop", self.AFKMode.chat.StopMovingOrSizing)
+	self.AFKMode.chat:SetScript("OnMouseDown", Chat_MouseDown)
 	self.AFKMode.chat:SetScript("OnMouseWheel", Chat_OnMouseWheel)
 	self.AFKMode.chat:SetScript("OnEvent", Chat_OnEvent)
 
@@ -783,6 +864,29 @@ function AFKS:Init()
 	self.AFKMode.bottom.logo:SetSize(256, 128)
 	self.AFKMode.bottom.logo:SetPoint("CENTER", self.AFKMode.bottom, "CENTER", 0, 25)
 	self.AFKMode.bottom.logo:SetTexture(logo)
+
+	self.AFKMode.chatminbar = CreateFrame("Frame", nil, self.AFKMode, BackdropTemplateMixin and "BackdropTemplate")
+	self.AFKMode.chatminbar:SetPoint("BOTTOMLEFT", self.AFKMode.bottom, "TOPLEFT", 0, 2)
+	self.AFKMode.chatminbar:SetSize(350, 20)
+	self.AFKMode.chatminbar:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = nil,
+		tile = false, tileSize = 0, edgeSize = 0,
+	})
+	self.AFKMode.chatminbar:SetBackdropColor(.2, .2, .2, .0)
+	self.AFKMode.chatminbar:SetScript("OnMouseDown", ChatMinBar_MouseDown)
+
+	self.AFKMode.chatminbar.title = self.AFKMode.chatminbar:CreateFontString(nil, 'OVERLAY')
+	self.AFKMode.chatminbar.title:SetPoint("CENTER", self.AFKMode.chatminbar, "CENTER", 0, 0)
+	FontTemplate(self.AFKMode.chatminbar.title, 20, "OUTLINE")
+
+	local text = format(AFKS_CHATBAR_TEXT, 0, 0, 0)
+	if IsInGuild() then
+		text = text.." "..format(AFKS_CHATBAR_GUILD, 0)
+	end
+	self.AFKMode.chatminbar.title:SetText(text)
+	self.AFKMode.chatminbar.title:SetTextColor(.6, .6, .6)
+	self.AFKMode.chatminbar.title:Hide()
 
 	local factionGroup = UnitFactionGroup("player")
 	local size, offsetX, offsetY = 140, -20, -16
@@ -930,10 +1034,10 @@ end
 
 function AFKS:SetAFK(status)
 	if status then
-		MoveViewLeftStart(CAMERA_SPEED)
+		MoveViewLeftStart(0.035)
 		self.AFKMode:Show()
 		CloseAllWindows()
-		_G.UIParent:Hide()
+		UIParent:Hide()
 
 		SetDate()
 		self.AFKMode.bottom.time:SetText(format("%s", GameTime_GetLocalTime(true)))
@@ -964,6 +1068,15 @@ function AFKS:SetAFK(status)
 		self.startTime = GetTime()
 		self.timer = C_Timer.NewTicker(1, function() self:UpdateTimer() end)
 
+		if self.AFKMode.chatminbar.minimized then
+			self.AFKMode.chatminbar.unreadwhisper = 0
+			self.AFKMode.chatminbar.unreadbnet = 0
+			self.AFKMode.chatminbar.unreadchannel = 0
+			self.AFKMode.chatminbar.unreadguild = 0
+			self.AFKMode.chatminbar.unreadgroup = 0
+			self.AFKMode.chatminbar.title:SetText(format(AFKS_CHATBARTITLE, 0, 0, 0, 0))
+		end
+
 		if self.options.hidechat then
 			self.AFKMode.chat:UnregisterAllEvents()
 			self.AFKMode.chat:Clear()
@@ -971,10 +1084,6 @@ function AFKS:SetAFK(status)
 			self.AFKMode.chat:RegisterEvent("CHAT_MSG_WHISPER")
 			self.AFKMode.chat:RegisterEvent("CHAT_MSG_BN_WHISPER")
 			self.AFKMode.chat:RegisterEvent("CHAT_MSG_GUILD")
-			self.AFKMode.chat:RegisterEvent("CHAT_MSG_PARTY")
-			self.AFKMode.chat:RegisterEvent("CHAT_MSG_PARTY_LEADER")
-			self.AFKMode.chat:RegisterEvent("CHAT_MSG_RAID")
-			self.AFKMode.chat:RegisterEvent("CHAT_MSG_RAID_LEADER")
 			self.AFKMode.chat:RegisterEvent("CHAT_MSG_CHANNEL")
 
 			if wowVersion == "retail" then
@@ -984,7 +1093,7 @@ function AFKS:SetAFK(status)
 
 		self.isAFK = true
 	elseif not status and self.isAFK then
-		_G.UIParent:Show()
+		UIParent:Show()
 		self.AFKMode:Hide()
 		MoveViewLeftStop();
 
@@ -996,7 +1105,8 @@ function AFKS:SetAFK(status)
 
 		self.AFKMode.chat:UnregisterAllEvents()
 		self.AFKMode.chat:Clear()
-		if wowVersion == "retail" and _G.PVEFrame:IsShown() then --odd bug, frame is blank
+
+		if wowVersion == "retail" and PVEFrame:IsShown() then --odd bug, frame is blank
 			--PVEFrame_ToggleFrame()
 			--PVEFrame_ToggleFrame()
 		end

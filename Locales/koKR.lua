@@ -5,17 +5,10 @@ AFKS_CAMPOFF = "\124cFFFFEA00캠핑 OFF\124r"
 SLASH_AFKSCampToggle2 = "/캠핑"
 
 -- Variables
+AFKS_CHATBAR_TEXT = "귓속말(|cffff7fff%d|r) 배틀넷(|cff00fffe%d|r) 채널(|cffffc0c0%d|r)"
+AFKS_CHATBAR_GUILD = "길드(|cff40ff40%d|r)"
 AFKS_NOGUILD = "길드 없음"
 AFKS_DATEFORMAT = "%d년 %d월 %d일\n%s"
-AFKS_WEEKDAYS = {
-	"일요일",
-	"월요일",
-	"화요일",
-	"수요일",
-	"목요일",
-	"금요일",
-	"토요일",
-}
 
 -- Options
 AFKS_ENABLED_TEXT = "활성화"
