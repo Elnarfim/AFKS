@@ -6,6 +6,8 @@ local AFKS = CreateFrame("Frame")
 
 local wowVersion
 local isHardcore
+local UIscale = 1
+local panelheight = GetScreenHeight() * 0.1
 
 if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
 	wowVersion = "classic"
@@ -643,6 +645,7 @@ local function SetSpecPanel()
 		[259] = 0.020, -- Assassination Rogue
 		[261] = 0.064, -- Subtlety Rogue
 		[262] = 0.037, -- Elemental Shaman
+		[263] = -0.01, -- Enhancement Shaman
 		[264] = 0.037, -- Resto Shaman
 		[265] = 0.020, -- Affl Warlock
 		[266] = -0.035, -- Demon Warlock
@@ -673,16 +676,32 @@ local function SetSpecPanel()
 			[34] = 40, -- Dark Iron Dwarf
 	}
 
-	local yoffset = 0
+	local yoffset = GetScreenHeight() * 0.1 - 102.4
+	if yoffset < 0 then
+		yoffset = yoffset * 2.3
+	else
+		yoffset = yoffset * 3.5
+	end
+	
 	local raceid = select(3, UnitRace("player"))
 	if model_yoffset[raceid] then
-		yoffset = model_yoffset[raceid]
+		yoffset = yoffset + model_yoffset[raceid]
 	end
-	if select(2, UnitClass("player")) == "EVOKER" then
+	if select(2, UnitClass("player")) == "DRUID" then
+		if C_UnitAuras_GetPlayerAuraBySpellID(5487) then -- Bear form
+			yoffset = yoffset + 25
+		elseif C_UnitAuras_GetPlayerAuraBySpellID(768) then -- Cat form
+			yoffset = yoffset - 135
+		elseif C_UnitAuras_GetPlayerAuraBySpellID(783) then -- Flying form
+			yoffset = yoffset + 40
+		elseif C_UnitAuras_GetPlayerAuraBySpellID(197625) then -- Moonkin form
+			yoffset = yoffset - 50
+		end
+	elseif select(2, UnitClass("player")) == "EVOKER" then
 		if C_UnitAuras_GetPlayerAuraBySpellID(372014) then
-			yoffset = -7
+			yoffset = yoffset + -7
 		else
-			yoffset = 70
+			yoffset = yoffset + 80
 		end
 	end
 	AFKS.AFKMode.bottom.modelHolder:ClearAllPoints()
@@ -709,6 +728,10 @@ local function SetSpecPanel()
 end
 
 local function SetLeftEndColor()
+	if not AFKS.AFKMode.bottom.leftendtex:IsVisible() then
+		return
+	end
+
 	local ColorBySpecID = {
 		-- Death Knight
 		[250] = {r=0.082, g=0.078, b=0.078},
@@ -722,18 +745,18 @@ local function SetLeftEndColor()
 		-- Druid
 		[102] = {r=0.086, g=0.1, b=0.243},
 		[103] = {r=0.082, g=0.129, b=0.188},
-		[104] = {r=0.231, g=0.117, b=0.031},
-		[105] = {r=0.067, g=0.094, b=0},
+		[104] = {r=0.172, g=0.086, b=0.002},
+		[105] = {r=0.058, g=0.086, b=0.002},
 
 		-- Evoker
 		[1467] = {r=0.1, g=0.063, b=0.1},
-		[1468] = {r=0.086, g=0.145, b=0.129},
+		[1468] = {r=0.062, g=0.121, b=0.105},
 		[1473] = {r=0.1, g=0.1, b=0.067},
 
 		-- Hunter
 		[253] = {r=0.082, g=0.098, b=0.235},
-		[254] = {r=0.082, g=0.1, b=0.055},
-		[255] = {r=0.172, g=0.137, b=0.129},
+		[254] = {r=0.066, g=0.09, b=0.043},
+		[255] = {r=0.176, g=0.152, b=0.137},
 
 		-- Mage
 		[62] = {r=0.066, g=0.023, b=0.141},
@@ -753,21 +776,21 @@ local function SetLeftEndColor()
 		-- Priest
 		[256] = {r=0.066, g=0.086, b=0.1},
 		[257] = {r=0.18, g=0.145, b=0.122},
-		[258] = {r=0.082, g=0.062, b=0.0745},
+		[258] = {r=0.113, g=0.07, b=0.086},
 
 		-- Rogue
-		[259] = {r=0.141, g=0.078, b=0.035},
+		[259] = {r=0.113, g=0.066, b=0.003},
 		[260] = {r=0.043, g=0.086, b=0.082},
 		[261] = {r=0.075, g=0.043, b=0.075},
 
 		-- Shaman
-		[262] = {r=0.035, g=0.1, b=0.192},
-		[263] = {r=0.1, g=0.1, b=0.196},
-		[264] = {r=0.086, g=0.1, b=0.122},
+		[262] = {r=0.003, g=0.078, b=0.149},
+		[263] = {r=0.074, g=0.07, b=0.156},
+		[264] = {r=0.082, g=0.086, b=0.121},
 
 		-- Warlock
 		[265] = {r=0.07, g=0.063, b=0.22},
-		[266] = {r=0.1, g=0.1, b=0.078},
+		[266] = {r=0.078, g=0.078, b=0.074},
 		[267] = {r=0.1, g=0.055, b=0.031},
 
 		-- Warrior
@@ -775,6 +798,7 @@ local function SetLeftEndColor()
 		[72] = {r=0.066, g=0.07, b=0.074},
 		[73] = {r=0.1, g=0.078, b=0.071},
 	}
+
 	local specid = select(1, GetSpecializationInfo(GetSpecialization()))
 	local r, g, b = ColorBySpecID[specid].r, ColorBySpecID[specid].g, ColorBySpecID[specid].b
 	AFKS.AFKMode.bottom.leftendtex:SetColorTexture(r, g, b)
@@ -889,20 +913,6 @@ local function GetCalendarSchedule(day, hour)
 	end                   
 end
 
-local function GetBGYOffset()
-	local yoffset = 0
-	local width, height = GetPhysicalScreenSize()
-	if width == 3840 and height == 2160 then -- 4K resolution offset
-		yoffset = 20
-	elseif width == 2560 and height == 1080 then -- WFHD resolution offset
-		yoffset = 8
-	elseif width == 1920 and height == 1080 then -- FHD resolution offset
-		yoffset = 5
-	end
-
-	return yoffset
-end
-
 local function GetWoWLogo()
 	local expansion
 	if wowVersion == "retail" then
@@ -946,14 +956,15 @@ end
 function AFKS:Init()
 	local logo = GetWoWLogo()
 	local class = select(2, UnitClass("player"))
-	local panelheight = GetScreenHeight() * 0.1
+
+	UIscale = UIParent:GetScale()
 	if panelheight < 102 then -- Adjust to 102.4 in small resolution
 		panelheight = 102.4
 	end
 
 	self.AFKMode = CreateFrame("Frame", "AFKSFrame")
 	self.AFKMode:SetFrameLevel(1)
-	self.AFKMode:SetScale(UIParent:GetScale())
+	self.AFKMode:SetScale(UIscale)
 	self.AFKMode:SetAllPoints(UIParent)
 	self.AFKMode:Hide()
 	self.AFKMode:EnableKeyboard(true)
@@ -1013,16 +1024,23 @@ function AFKS:Init()
 	self.AFKMode.chatminbar.title:Hide()
 
 	if wowVersion == "retail" then
-		local yoffset = GetBGYOffset()
+		local yoffset = panelheight - 102.4
+		if yoffset < 0 then
+			yoffset = 0
+		end
 
 		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
 		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
 		self.AFKMode.bottom.leftend = CreateFrame("Frame", nil, self.AFKMode.bottom)
 		self.AFKMode.bottom.leftendtex = self.AFKMode.bottom.leftend:CreateTexture(nil, 'BACKGROUND')
-		self.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight-3)
-		self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
-		self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
+		if GetScreenWidth() - 1567 > 0 then
+			self.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight - 3)
+			self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
+			self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
+		else
+			self.AFKMode.bottom.leftendtex:Hide()
+		end
 
 		self.AFKMode.bottom.schedule = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
 		FontTemplate(self.AFKMode.bottom.schedule, 20, "OUTLINE")
@@ -1143,14 +1161,11 @@ do
 
 	AFKS:Init()
 
-	local tocVersion = select(4, GetBuildInfo())
-	if tocVersion >= 11500 then
-		hooksecurefunc ("LFGListInviteDialog_Show", function()
-			if not InCombatLockdown() then
-				AFKS:SetAFK(false)
-			end
-		end)
-	end
+	hooksecurefunc ("LFGListInviteDialog_Show", function()
+		if not InCombatLockdown() then
+			AFKS:SetAFK(false)
+		end
+	end)
 
 	if wowVersion == "retail" then
 		AddonCompartmentFrame:RegisterAddon({
@@ -1180,6 +1195,46 @@ end
 
 function AFKS:SetAFK(status)
 	if status then
+		local currUIscale = UIParent:GetScale()
+
+		if UIscale ~= currUIscale then
+			UIscale = currUIscale
+			panelheight = GetScreenHeight() * 0.1
+			if panelheight < 102 then -- Adjust to 102.4 in small resolution
+				panelheight = 102.4
+			end
+
+			local yoffset = panelheight - 102.4
+
+			self.AFKMode:SetScale(UIscale)
+			self.AFKMode.bottom:SetWidth(GetScreenWidth() + 4)
+			self.AFKMode.bottom:SetHeight(panelheight)
+			self.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
+
+			if wowVersion == "retail" then
+				if yoffset < 0 then
+					yoffset = 0
+				end
+				self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
+				if GetScreenWidth() - 1567 > 0 then
+					self.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight - 3)
+					self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
+					self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
+					self.AFKMode.bottom.leftendtex:Show()
+				else
+					self.AFKMode.bottom.leftendtex:Hide()
+				end
+			else
+				if yoffset > 0 then
+					yoffset = yoffset + 30
+				else
+					yoffset = yoffset - 30
+				end
+				self.AFKMode.bottom.modelHolder:ClearAllPoints()
+				self.AFKMode.bottom.modelHolder:SetPoint("BOTTOMRIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", -220, 220 + yoffset)
+			end
+		end
+
 		MoveViewLeftStart(0.035)
 		self.AFKMode:Show()
 		CloseAllWindows()
@@ -1188,7 +1243,7 @@ function AFKS:SetAFK(status)
 		SetDate(date("%a"), tonumber(date("%w")))
 		self.AFKMode.bottom.time:SetText(format("%s", GameTime_GetLocalTime(true)))
 
-		if(IsInGuild()) then
+		if IsInGuild() then
 			local guildName, guildRankName = GetGuildInfo("player")
 			self.AFKMode.bottom.guild:SetText(format("%s-%s", guildName, guildRankName))
 		else
