@@ -14,8 +14,8 @@ if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
 	if C_GameRules.IsHardcoreActive() then
 		isHardcore = true
 	end
-elseif WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC then
-	wowVersion = "wrath"
+elseif WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC then
+	wowVersion = "cata"
 elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
 end
@@ -50,7 +50,7 @@ local UnitInParty = UnitInParty
 local UnitInRaid = UnitInRaid
 local UnitOnTaxi = UnitOnTaxi
 local GetExpansionDisplayInfo = GetExpansionDisplayInfo
-local GetExpansionLevel = GetExpansionLevel
+local GetClientDisplayExpansionLevel = GetClientDisplayExpansionLevel
 local MoveViewLeftStart = MoveViewLeftStart
 local MoveViewLeftStop = MoveViewLeftStop
 local C_TimerNewTicker, C_TimerNewTimer, C_TimerAfter = C_Timer.NewTicker, C_Timer.NewTimer, C_Timer.After
@@ -61,23 +61,37 @@ local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 local C_Texture_GetAtlasInfo
 local GetSpecializationInfo
 local GetSpecialization
-local C_Calendar_GetNumDayEvents
-local C_Calendar_GetDayEvent
 local C_PetBattles_IsInBattle
 local C_UnitAuras_GetPlayerAuraBySpellID
 local C_TradeSkillUI_IsRecipeRepeating
 local C_Club_GetStreamInfo
 local C_Club_GetClubInfo
 
+--Retail and Cata API
+local C_Calendar_GetNumDayEvents
+local C_Calendar_GetDayEvent
+
+--Cata only API
+local GetNumTalentTabs
+local GetTalentTabInfo
+
 --Classic only API
 local CastingInfo
+
+if wowVersion == "retail" or wowVersion == "cata" then
+	C_Calendar_GetNumDayEvents = _G.C_Calendar.GetNumDayEvents
+	C_Calendar_GetDayEvent = _G.C_Calendar.GetDayEvent
+end
+
+if wowVersion == "cata" then
+	GetNumTalentTabs = _G.GetNumTalentTabs
+	GetTalentTabInfo = _G.GetTalentTabInfo
+end
 
 if wowVersion == "retail" then
 	C_Texture_GetAtlasInfo = _G.C_Texture.GetAtlasInfo
 	GetSpecializationInfo = _G.GetSpecializationInfo
 	GetSpecialization = _G.GetSpecialization
-	C_Calendar_GetNumDayEvents = _G.C_Calendar.GetNumDayEvents
-	C_Calendar_GetDayEvent = _G.C_Calendar.GetDayEvent
 	C_TradeSkillUI_IsRecipeRepeating = _G.C_TradeSkillUI.IsRecipeRepeating
 	C_PetBattles_IsInBattle = _G.C_PetBattles.IsInBattle
 	C_UnitAuras_GetPlayerAuraBySpellID = _G.C_UnitAuras.GetPlayerAuraBySpellID
@@ -124,7 +138,7 @@ end
 
 local public_channels = {
 	["retail"] = {26, 42},
-	["wrath"] = {23, 25, 26},
+	["cata"] = {23, 25, 26},
 	["classic"] = {23, 24, 25},
 }
 
@@ -320,7 +334,7 @@ end
 --[[
 local function GetBNFriendColor(name, id, useBTag)
 	local _, _, battleTag, _, _, bnetIDGameAccount = BNGetFriendInfoByID(id)
-	local TAG = useBTag and battleTag and strmatch(battleTag,'([^#]+)')
+	local TAG = useBTag and battleTag and strmatch(battleTag,"([^#]+)")
 	local Class
 
 	if not bnetIDGameAccount then --dont know how this is possible
@@ -336,15 +350,15 @@ local function GetBNFriendColor(name, id, useBTag)
 		_, _, _, _, _, _, _, Class = BNGetGameAccountInfo(bnetIDGameAccount)
 	end
 
-	if Class and Class ~= '' then --other non-english locales require this
+	if Class and Class ~= "" then --other non-english locales require this
 		for k,v in pairs(LOCALIZED_CLASS_NAMES_MALE) do if Class == v then Class = k;break end end
 		for k,v in pairs(LOCALIZED_CLASS_NAMES_FEMALE) do if Class == v then Class = k;break end end
 	end
 
-	local CLASS = Class and Class ~= '' and gsub(strupper(Class),'%s','')
+	local CLASS = Class and Class ~= "" and gsub(strupper(Class),"%s","")
 	local COLOR = CLASS and classcolors[CLASS]
 
-	return (COLOR and format('|c%s%s|r', COLOR.colorStr, TAG or name)) or TAG or name
+	return (COLOR and format("|c%s%s|r", COLOR.colorStr, TAG or name)) or TAG or name
 end
 ]]
 
@@ -815,24 +829,26 @@ local function SetSpecIcon()
 				AFKS.AFKMode.bottom.specicon:Hide()
 			end
 		else
-			local primaryTalent
-			local talent_tree = {}
+			local talent_points = {}
+			local spent = 0
+			local specicon
+
 			for i=1, GetNumTalentTabs() do
-				talent_tree[i] = select(3, GetTalentTabInfo(i))
+				talent_points[i] = {}
+				talent_points[i]["icon"] = select(4, GetTalentTabInfo(i))
+				talent_points[i]["spent"] = select(5, GetTalentTabInfo(i))
 			end
-			for k, v in pairs(talent_tree) do
-				if k > 1 and v > talent_tree[k-1] then
-					primaryTalent = k
+			for k, v in pairs(talent_points) do
+				if k == 1 then
+					spent = v["spent"]
+					specicon = v["icon"]
 				else
-					primaryTalent = 1
+					if v["spent"] > spent then
+						specicon = v["icon"]
+						spent = v["spent"]
+					end
 				end
 			end
-			if primaryTalent == 1 and talent_tree[1] == 0 then
-				AFKS.AFKMode.bottom.specicon:Hide()
-				return
-			end
-
-			local specicon = select(2, GetTalentTabInfo(primaryTalent))
 			if specicon then
 				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
 				AFKS.AFKMode.bottom.specicon:Show()
@@ -916,9 +932,9 @@ end
 local function GetWoWLogo()
 	local expansion
 	if wowVersion == "retail" then
-		expansion = GetExpansionDisplayInfo(GetExpansionLevel())
+		expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel())
 	else
-		expansion = GetExpansionDisplayInfo(GetExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
+		expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
 	end
 	return expansion and expansion.logo
 end
@@ -995,7 +1011,7 @@ function AFKS:Init()
 	self.AFKMode.bottom:SetWidth(GetScreenWidth() + 4)
 	self.AFKMode.bottom:SetHeight(panelheight)
 
-	self.AFKMode.bottom.logo = self.AFKMode:CreateTexture(nil, 'OVERLAY')
+	self.AFKMode.bottom.logo = self.AFKMode:CreateTexture(nil, "OVERLAY")
 	self.AFKMode.bottom.logo:SetSize(256, 128)
 	self.AFKMode.bottom.logo:SetPoint("CENTER", self.AFKMode.bottom, "CENTER", 0, 25)
 	self.AFKMode.bottom.logo:SetTexture(logo)
@@ -1011,7 +1027,7 @@ function AFKS:Init()
 	self.AFKMode.chatminbar:SetBackdropColor(.2, .2, .2, .0)
 	self.AFKMode.chatminbar:SetScript("OnMouseDown", ChatMinBar_MouseDown)
 
-	self.AFKMode.chatminbar.title = self.AFKMode.chatminbar:CreateFontString(nil, 'OVERLAY')
+	self.AFKMode.chatminbar.title = self.AFKMode.chatminbar:CreateFontString(nil, "OVERLAY")
 	self.AFKMode.chatminbar.title:SetPoint("CENTER", self.AFKMode.chatminbar, "CENTER", 0, 0)
 	FontTemplate(self.AFKMode.chatminbar.title, 20, "OUTLINE")
 
@@ -1029,11 +1045,11 @@ function AFKS:Init()
 			yoffset = 0
 		end
 
-		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, 'BACKGROUND')
+		self.AFKMode.bottom.specpanel = self.AFKMode.bottom:CreateTexture(nil, "BACKGROUND")
 		self.AFKMode.bottom.specpanel:SetSize(1612, 774)
 		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
 		self.AFKMode.bottom.leftend = CreateFrame("Frame", nil, self.AFKMode.bottom)
-		self.AFKMode.bottom.leftendtex = self.AFKMode.bottom.leftend:CreateTexture(nil, 'BACKGROUND')
+		self.AFKMode.bottom.leftendtex = self.AFKMode.bottom.leftend:CreateTexture(nil, "BACKGROUND")
 		if GetScreenWidth() - 1567 > 0 then
 			self.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight - 3)
 			self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
@@ -1041,12 +1057,14 @@ function AFKS:Init()
 		else
 			self.AFKMode.bottom.leftendtex:Hide()
 		end
+	end
 
-		self.AFKMode.bottom.schedule = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+	if wowVersion == "retail" or wowVersion == "cata" then
+		self.AFKMode.bottom.schedule = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 		FontTemplate(self.AFKMode.bottom.schedule, 20, "OUTLINE")
 		self.AFKMode.bottom.schedule:SetPoint("BOTTOMLEFT", self.AFKMode.bottom.logo, "BOTTOMRIGHT", 200, 0)
 		self.AFKMode.bottom.schedule:SetTextColor(1, 1, 1)
-		self.AFKMode.bottom.calendaricon = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
+		self.AFKMode.bottom.calendaricon = self.AFKMode.bottom:CreateTexture(nil, "OVERLAY")
 		self.AFKMode.bottom.calendaricon:SetPoint("RIGHT", self.AFKMode.bottom.schedule, "LEFT", 0, 0)
 		self.AFKMode.bottom.calendaricon:SetSize(40, 40)
 	end
@@ -1068,18 +1086,18 @@ function AFKS:Init()
 	end
 
 	if wowVersion == "retail" then
-		self.AFKMode.bottom.faction = self.AFKMode.bottom.leftend:CreateTexture(nil, 'OVERLAY')
+		self.AFKMode.bottom.faction = self.AFKMode.bottom.leftend:CreateTexture(nil, "OVERLAY")
 	else
-		self.AFKMode.bottom.faction = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
+		self.AFKMode.bottom.faction = self.AFKMode.bottom:CreateTexture(nil, "OVERLAY")
 	end
 	self.AFKMode.bottom.faction:SetPoint("BOTTOMLEFT", self.AFKMode.bottom, "BOTTOMLEFT", offsetX, offsetY)
 	self.AFKMode.bottom.faction:SetTexture("Interface\\Timer\\"..factionGroup.."-Logo")
 	self.AFKMode.bottom.faction:SetSize(size, size)
 
 	if wowVersion == "retail" then
-		self.AFKMode.bottom.name = self.AFKMode.bottom.leftend:CreateFontString(nil, 'OVERLAY')
+		self.AFKMode.bottom.name = self.AFKMode.bottom.leftend:CreateFontString(nil, "OVERLAY")
 	else
-		self.AFKMode.bottom.name = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+		self.AFKMode.bottom.name = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 	end
 	FontTemplate(self.AFKMode.bottom.name, 20, "OUTLINE")
 	self.AFKMode.bottom.name:SetText(format("%s-%s", UnitName("player"), GetRealmName()))
@@ -1088,18 +1106,18 @@ function AFKS:Init()
 
 	if wowVersion ~= "classic" then
 		if wowVersion == "retail" then
-			self.AFKMode.bottom.specicon = self.AFKMode.bottom.leftend:CreateTexture(nil, 'OVERLAY')
+			self.AFKMode.bottom.specicon = self.AFKMode.bottom.leftend:CreateTexture(nil, "OVERLAY")
 		else
-			self.AFKMode.bottom.specicon = self.AFKMode.bottom:CreateTexture(nil, 'OVERLAY')
+			self.AFKMode.bottom.specicon = self.AFKMode.bottom:CreateTexture(nil, "OVERLAY")
 		end
 		self.AFKMode.bottom.specicon:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, -2)
 		self.AFKMode.bottom.specicon:SetSize(25, 25)
 	end
 
 	if wowVersion == "retail" then
-		self.AFKMode.bottom.guild = self.AFKMode.bottom.leftend:CreateFontString(nil, 'OVERLAY')
+		self.AFKMode.bottom.guild = self.AFKMode.bottom.leftend:CreateFontString(nil, "OVERLAY")
 	else
-		self.AFKMode.bottom.guild = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+		self.AFKMode.bottom.guild = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 	end
 	FontTemplate(self.AFKMode.bottom.guild, 20, "OUTLINE")
 	self.AFKMode.bottom.guild:SetText(AFKS_NOGUILD)
@@ -1107,21 +1125,21 @@ function AFKS:Init()
 	self.AFKMode.bottom.guild:SetTextColor(0.7, 0.7, 0.7)
 
 	if wowVersion == "retail" then
-		self.AFKMode.bottom.timer = self.AFKMode.bottom.leftend:CreateFontString(nil, 'OVERLAY')
+		self.AFKMode.bottom.timer = self.AFKMode.bottom.leftend:CreateFontString(nil, "OVERLAY")
 	else
-		self.AFKMode.bottom.timer = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+		self.AFKMode.bottom.timer = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 	end
 	FontTemplate(self.AFKMode.bottom.timer, 20, "OUTLINE")
 	self.AFKMode.bottom.timer:SetText("00:00")
 	self.AFKMode.bottom.timer:SetPoint("TOPLEFT", self.AFKMode.bottom.guild, "BOTTOMLEFT", 0, -6)
 	self.AFKMode.bottom.timer:SetTextColor(0.7, 0.7, 0.7)
 
-	self.AFKMode.bottom.date = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+	self.AFKMode.bottom.date = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 	FontTemplate(self.AFKMode.bottom.date, 20, "OUTLINE")
 	self.AFKMode.bottom.date:SetPoint("RIGHT", self.AFKMode.bottom, "RIGHT", -10, 25)
 	self.AFKMode.bottom.date:SetTextColor(0.7, 0.7, 0.7)
 
-	self.AFKMode.bottom.time = self.AFKMode.bottom:CreateFontString(nil, 'OVERLAY')
+	self.AFKMode.bottom.time = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 	FontTemplate(self.AFKMode.bottom.time, 20, "OUTLINE")
 	self.AFKMode.bottom.time:SetPoint("CENTER", self.AFKMode.bottom.date, "CENTER", 0, -50)
 	self.AFKMode.bottom.time:SetTextColor(0.7, 0.7, 0.7)
@@ -1187,7 +1205,7 @@ function AFKS:UpdateTimer()
 
 	if date("%H") == "23" and date("%M") == "59" and tonumber(date("%S")) >= 55 then
 		SetDate(date("%a"), tonumber(date("%w")))
-		if wowVersion == "retail" then
+		if wowVersion == "retail" or wowVersion == "cata" then
 			GetCalendarSchedule(tonumber(date("%d")), tonumber(date("%H")))
 		end
 	end
@@ -1257,6 +1275,9 @@ function AFKS:SetAFK(status)
 		if wowVersion == "retail" then
 			SetSpecPanel()
 			SetLeftEndColor()
+		end
+
+		if wowVersion == "retail" or wowVersion == "cata" then
 			GetCalendarSchedule(tonumber(date("%d")), tonumber(date("%H")))
 		end
 
