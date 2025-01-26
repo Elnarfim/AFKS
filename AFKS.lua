@@ -5,15 +5,13 @@
 local AFKS = CreateFrame("Frame")
 
 local wowVersion
-local isHardcore
 local UIscale = 1
 local panelheight = GetScreenHeight() * 0.1
 
 if WOW_PROJECT_ID == WOW_PROJECT_CLASSIC then
 	wowVersion = "classic"
-	if C_GameRules.IsHardcoreActive() then
-		isHardcore = true
-	end
+elseif WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC then
+	wowVersion = "wrath" -- CN only
 elseif WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC then
 	wowVersion = "cata"
 elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
@@ -38,10 +36,9 @@ local GetTime = GetTime
 local CreateFrame = CreateFrame
 local GetBattlefieldStatus = GetBattlefieldStatus
 local GetGuildInfo = GetGuildInfo
-local GetZonePVPInfo = GetZonePVPInfo
+local GetZonePVPInfo = _G.C_PvP.GetZonePVPInfo
 local InCombatLockdown = InCombatLockdown
 local IsInGuild = IsInGuild
-local IsResting = IsResting
 local UnitFactionGroup = UnitFactionGroup
 local UnitIsPVP = UnitIsPVP
 local UnitIsAFK = UnitIsAFK
@@ -49,38 +46,42 @@ local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitInParty = UnitInParty
 local UnitInRaid = UnitInRaid
 local UnitOnTaxi = UnitOnTaxi
+local WantsAlteredForm = _G.C_UnitAuras.WantsAlteredForm
+local GetShapeshiftFormID = GetShapeshiftFormID
 local GetExpansionDisplayInfo = GetExpansionDisplayInfo
 local GetClientDisplayExpansionLevel = GetClientDisplayExpansionLevel
 local MoveViewLeftStart = MoveViewLeftStart
 local MoveViewLeftStop = MoveViewLeftStop
-local C_TimerNewTicker, C_TimerNewTimer, C_TimerAfter = C_Timer.NewTicker, C_Timer.NewTimer, C_Timer.After
+local NewTicker, NewTimer, TimerAfter = _G.C_Timer.NewTicker, _G.C_Timer.NewTimer, _G.C_Timer.After
 
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 
 --Retail only API
-local C_Texture_GetAtlasInfo
+local GetAtlasInfo
 local GetSpecializationInfo
 local GetSpecialization
-local C_PetBattles_IsInBattle
-local C_UnitAuras_GetPlayerAuraBySpellID
-local C_TradeSkillUI_IsRecipeRepeating
-local C_Club_GetStreamInfo
-local C_Club_GetClubInfo
+local PetBattles_IsInBattle
+local IsRecipeRepeating
+local GetStreamInfo
+local GetClubInfo
+local GetGlidingInfo
 
 --Retail and Cata API
-local C_Calendar_GetNumDayEvents
-local C_Calendar_GetDayEvent
+local GetNumDayEvents
+local GetDayEvent
 
---Cata only API
+--Cata and Wrath API
 local GetNumTalentTabs
 local GetTalentTabInfo
 
 --Classic only API
 local CastingInfo
+local GetCurrentGameModeRecordID
+local GetGameModeDisplayInfo
 
 if wowVersion == "retail" or wowVersion == "cata" then
-	C_Calendar_GetNumDayEvents = _G.C_Calendar.GetNumDayEvents
-	C_Calendar_GetDayEvent = _G.C_Calendar.GetDayEvent
+	GetNumDayEvents = _G.C_Calendar.GetNumDayEvents
+	GetDayEvent = _G.C_Calendar.GetDayEvent
 end
 
 if wowVersion == "cata" then
@@ -89,16 +90,18 @@ if wowVersion == "cata" then
 end
 
 if wowVersion == "retail" then
-	C_Texture_GetAtlasInfo = _G.C_Texture.GetAtlasInfo
+	GetAtlasInfo = _G.C_Texture.GetAtlasInfo
 	GetSpecializationInfo = _G.GetSpecializationInfo
 	GetSpecialization = _G.GetSpecialization
-	C_TradeSkillUI_IsRecipeRepeating = _G.C_TradeSkillUI.IsRecipeRepeating
-	C_PetBattles_IsInBattle = _G.C_PetBattles.IsInBattle
-	C_UnitAuras_GetPlayerAuraBySpellID = _G.C_UnitAuras.GetPlayerAuraBySpellID
-	C_Club_GetStreamInfo = _G.C_Club.GetStreamInfo
-	C_Club_GetClubInfo = _G.C_Club.GetClubInfo
+	IsRecipeRepeating = _G.C_TradeSkillUI.IsRecipeRepeating
+	PetBattles_IsInBattle = _G.C_PetBattles.IsInBattle
+	GetStreamInfo = _G.C_Club.GetStreamInfo
+	GetClubInfo = _G.C_Club.GetClubInfo
+	GetGlidingInfo = _G.C_PlayerInfo.GetGlidingInfo
 else
 	CastingInfo = _G.CastingInfo
+	GetCurrentGameModeRecordID = _G.C_GameModeManager.GetCurrentGameModeRecordID
+	GetGameModeDisplayInfo = _G.C_GameModeManager.GetGameModeDisplayInfo
 end
 
 --WoW Functions / Frames
@@ -145,6 +148,7 @@ local public_channels = {
 local default_options = {
 	enabled = true,
 	hidechat = false,
+	group = false,
 }
 
 function AFKS:OnEvent(event, ...)
@@ -154,6 +158,9 @@ function AFKS:OnEvent(event, ...)
 
 		self:Toggle()
 		self:RenderOptions()
+		if wowVersion == "classic" and C_GameRules.IsHardcoreActive() then
+			self.isHardcore = true
+		end
 	end
 
 	if event == "PLAYER_REGEN_DISABLED" or event == "LFG_PROPOSAL_SHOW" or event == "UPDATE_BATTLEFIELD_STATUS" or event == "PARTY_INVITE_REQUEST" then
@@ -175,6 +182,10 @@ function AFKS:OnEvent(event, ...)
 		return
 	end
 
+	if event == "PLAY_MOVIE" then
+		self.isCinematic = true
+	end
+
 	if event == "TALKINGHEAD_REQUESTED" and self.isAFK then
 		self:SetAFK(false)
 	end
@@ -182,7 +193,7 @@ function AFKS:OnEvent(event, ...)
 	if event == "PLAYER_REGEN_ENABLED" then
 		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
 		if self.isInterrupted then
-			C_TimerAfter(0.5, function() self:SetAFK(false) end)
+			TimerAfter(0.5, function() self:SetAFK(false) end)
 			self.isInterrupted = false
 		end
 	end
@@ -194,28 +205,51 @@ function AFKS:OnEvent(event, ...)
 		return
 	end
 
-	if wowVersion == "classic" and isHardcore and not IsResting() then
+	if self.isCinematic then
+		if MovieFrame:IsShown() then
+			return
+		else
+			if not UnitIsAFK("player") then
+				self.isCinematic = false
+			end
+		end
+	end
+
+	if self.isHardcore then
 		return
 	end
-	if UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and C_PetBattles_IsInBattle()) then
+	--[[
+	if UnitInParty("player") or UnitInRaid("player") or (wowVersion == "retail" and PetBattles_IsInBattle()) then
 		return
 	end
-	if UnitIsPVP("player") and GetZonePVPInfo() ~= "sanctuary" and not IsResting() then
+	]]
+
+	if not self.options.group and (IsInGroup() or (wowVersion == "retail" and PetBattles_IsInBattle())) then
+		return
+	end
+
+	if wowVersion == "retail" and GetGlidingInfo() then
+		return
+	end
+
+	if UnitIsPVP("player") and (GetZonePVPInfo() == "combat" or GetZonePVPInfo() == "contested" or GetZonePVPInfo() == "hostile") then
 		return
 	end
 	if UnitIsDeadOrGhost("player") or InCombatLockdown() then
 		return
 	end
 	if wowVersion == "retail" then
-		if C_TradeSkillUI_IsRecipeRepeating() then
+		if IsRecipeRepeating() then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
-			C_TimerAfter(30, function() self:OnEvent() end)
+			TimerAfter(30, function() self:OnEvent() end)
+			return
+		elseif ( ProfessionsFrame and ProfessionsFrame:IsShown() ) or ( ProfessionsCustomerOrdersFrame and ProfessionsCustomerOrdersFrame:IsShown() ) then
 			return
 		end
 	else
 		if CastingInfo() then
 			 --Don't activate afk if player is crafting stuff, check back in 30 seconds
-			C_TimerAfter(30, function() self:OnEvent() end)
+			TimerAfter(30, function() self:OnEvent() end)
 			return
 		end
 	end
@@ -234,6 +268,7 @@ function AFKS:Toggle()
 		self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnEvent")
 		self:RegisterEvent("PLAYER_CONTROL_GAINED", "OnEvent")
 		self:RegisterEvent("UPDATE_BATTLEFIELD_STATUS", "OnEvent")
+		self:RegisterEvent("PLAY_MOVIE", "OnEvent")
 		if wowVersion == "retail" then
 			self:RegisterEvent("LFG_PROPOSAL_SHOW", "OnEvent")
 			self:RegisterEvent("PARTY_INVITE_REQUEST", "OnEvent")
@@ -245,6 +280,7 @@ function AFKS:Toggle()
 		self:UnregisterEvent("PLAYER_REGEN_DISABLED")
 		self:UnregisterEvent("PLAYER_CONTROL_GAINED")
 		self:UnregisterEvent("UPDATE_BATTLEFIELD_STATUS")
+		self:UnregisterEvent("PLAY_MOVIE")
 		if wowVersion == "retail" then
 			self:UnregisterEvent("LFG_PROPOSAL_SHOW")
 			self:UnregisterEvent("PARTY_INVITE_REQUEST")
@@ -260,7 +296,7 @@ local function OnKeyDown(self, key)
 	else
 		if InCombatLockdown() then return end
 		AFKS:SetAFK(false)
-		C_TimerAfter(60, function() AFKS:OnEvent() end)
+		TimerAfter(60, function() AFKS:OnEvent() end)
 	end
 end
 
@@ -271,11 +307,10 @@ local function Chat_MouseDown(self, button)
 		AFKS.AFKMode.chatminbar.unreadbnet = 0
 		AFKS.AFKMode.chatminbar.unreadchannel = 0
 		AFKS.AFKMode.chatminbar.unreadguild = 0
-		AFKS.AFKMode.chatminbar.unreadgroup = 0
 
-		local text = format(AFKS_CHATBAR_TEXT, 0, 0, 0)
+		local text = format(AFKS_CHATBAR_TEXT, AFKS.AFKMode.chatminbar.unreadwhisper, AFKS.AFKMode.chatminbar.unreadbnet, AFKS.AFKMode.chatminbar.unreadchannel)
 		if IsInGuild() then
-			text = text.." "..format(AFKS_CHATBAR_GUILD, 0)
+			text = text.." "..format(AFKS_CHATBAR_GUILD, AFKS.AFKMode.chatminbar.unreadguild)
 		end
 		AFKS.AFKMode.chatminbar.title:SetText(text)
 		AFKS.AFKMode.chatminbar.title:Show()
@@ -322,9 +357,9 @@ end
 
 local function GetCommunityName(clubId, streamId)
 	local communityName = ""
-	local streamInfo = C_Club_GetStreamInfo(clubId, streamId)
+	local streamInfo = GetStreamInfo(clubId, streamId)
 	if streamInfo and streamInfo.streamType == 0 then
-		local clubInfo = C_Club.GetClubInfo(clubId)
+		local clubInfo = GetClubInfo(clubId)
 		communityName = clubInfo and TruncateToMaxLength(clubInfo.shortName or clubInfo.name, 12) or ""
 	end
 	
@@ -389,11 +424,11 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 	local playerLink
 	local texture = ""
 	if type == "BN_WHISPER" then
-		local accountInfo = C_BattleNet.GetAccountInfoByID(arg13)
+		local accountInfo = _G.C_BattleNet.GetAccountInfoByID(arg13)
 		if accountInfo and accountInfo.gameAccountInfo.clientProgram ~= "" then
 			texture = BNet_GetClientEmbeddedAtlas(accountInfo.gameAccountInfo.clientProgram, 14, 14)
 		end
-		playerLink = "|HBNplayer:"..arg2..":"..arg13..":"..arg11..":"..chatGroup..(chatTarget and ":"..chatTarget or "").."|h"
+		playerLink = texture.."|HBNplayer:"..arg2..":"..arg13..":"..arg11..":"..chatGroup..(chatTarget and ":"..chatTarget or "").."|h"
 		if AFKS.AFKMode.chatminbar.minimized then
 			AFKS.AFKMode.chatminbar.unreadbnet = AFKS.AFKMode.chatminbar.unreadbnet + 1
 			--print("bnet:"..AFKS.AFKMode.chatminbar.unreadbnet)
@@ -405,8 +440,6 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 	local message = arg1
 	if ( arg14 ) then	--isMobile
 		message = _G.ChatFrame_GetMobileEmbeddedTexture(info.r, info.g, info.b)..message
-	else
-		message = texture..message
 	end
 	
 	--Escape any % characters, as it may otherwise cause an "invalid option in format" error in the next step
@@ -452,14 +485,26 @@ local function Chat_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg
 		if type == "WHISPER" then
 			AFKS.AFKMode.chatminbar.unreadwhisper = AFKS.AFKMode.chatminbar.unreadwhisper + 1
 			--print("whisper:"..AFKS.AFKMode.chatminbar.unreadwhisper)
-		--elseif type == "BN_WHISPER" then
-		--	AFKS.AFKMode.chatminbar.unreadbnet = AFKS.AFKMode.chatminbar.unreadbnet + 1
 		elseif type == "GUILD" then
 			AFKS.AFKMode.chatminbar.unreadguild = AFKS.AFKMode.chatminbar.unreadguild + 1
 		end
-		local text = format(AFKS_CHATBAR_TEXT, AFKS.AFKMode.chatminbar.unreadwhisper, AFKS.AFKMode.chatminbar.unreadbnet, AFKS.AFKMode.chatminbar.unreadchannel)
+		local unreadwhisper, unreadbnet, unreadchannel = AFKS.AFKMode.chatminbar.unreadwhisper, AFKS.AFKMode.chatminbar.unreadbnet, AFKS.AFKMode.chatminbar.unreadchannel
+		if unreadwhisper > 0 then
+			unreadwhisper = "|cffffffff"..unreadwhisper.."|r"
+		end
+		if unreadbnet > 0 then
+			unreadbnet = "|cffffffff"..unreadbnet.."|r"
+		end
+		if unreadchannel > 0 then
+			unreadchannel = "|cffffffff"..unreadchannel.."|r"
+		end
+		local text = format(AFKS_CHATBAR_TEXT, unreadwhisper, unreadbnet, unreadchannel)
 		if IsInGuild() then
-			text = text.." "..format(AFKS_CHATBAR_GUILD, AFKS.AFKMode.chatminbar.unreadguild)
+			local unreadguild = AFKS.AFKMode.chatminbar.unreadguild
+			if unreadguild > 0 then
+				unreadguild = "|cffffffff"..unreadguild.."|r"
+			end
+			text = text.." "..format(AFKS_CHATBAR_GUILD, unreadguild)
 		end
 
 		AFKS.AFKMode.chatminbar.title:SetText(text)
@@ -569,6 +614,80 @@ local function SetTemplate(Frame)
 end
 
 local function SetSpecPanel()
+	local function SetLeftEndColor(specid)
+		local ColorBySpecID = {
+			-- Death Knight
+			[250] = {0.082, 0.078, 0.078},
+			[251] = {0.019, 0.11, 0.176},
+			[252] = {0.07, 0.082, 0.027},
+
+			-- Demon Hunter
+			[577] = {0.043, 0.1, 0.078},
+			[581] = {0.07, 0.055, 0.18},
+
+			-- Druid
+			[102] = {0.086, 0.1, 0.243},
+			[103] = {0.082, 0.129, 0.188},
+			[104] = {0.172, 0.086, 0.002},
+			[105] = {0.058, 0.086, 0.002},
+
+			-- Evoker
+			[1467] = {0.1, 0.063, 0.1},
+			[1468] = {0.062, 0.121, 0.105},
+			[1473] = {0.1, 0.1, 0.067},
+
+			-- Hunter
+			[253] = {0.082, 0.098, 0.235},
+			[254] = {0.066, 0.09, 0.043},
+			[255] = {0.176, 0.152, 0.137},
+
+			-- Mage
+			[62] = {0.066, 0.023, 0.141},
+			[63] = {0.1, 0.059, 0.035},
+			[64] = {0.062, 0.078, 0.145},
+
+			-- Monk
+			[268] = {0.082, 0.09, 0},
+			[269] = {0.125, 0.1, 0.16},
+			[270] = {0.118, 0.149, 0.255},
+
+			-- Paladin
+			[65] = {0.1, 0.067, 0.047},
+			[66] = {0.176, 0.067, 0.129},
+			[70] = {0.184, 0.145, 0.047},
+
+			-- Priest
+			[256] = {0.066, 0.086, 0.1},
+			[257] = {0.18, 0.145, 0.122},
+			[258] = {0.113, 0.07, 0.086},
+
+			-- Rogue
+			[259] = {0.113, 0.066, 0.003},
+			[260] = {0.043, 0.086, 0.082},
+			[261] = {0.075, 0.043, 0.075},
+
+			-- Shaman
+			[262] = {0.003, 0.078, 0.149},
+			[263] = {0.074, 0.07, 0.156},
+			[264] = {0.082, 0.086, 0.121},
+
+			-- Warlock
+			[265] = {0.07, 0.063, 0.22},
+			[266] = {0.078, 0.078, 0.074},
+			[267] = {0.1, 0.055, 0.031},
+
+			-- Warrior
+			[71] = {0.05, 0.078, 0.082},
+			[72] = {0.066, 0.07, 0.074},
+			[73] = {0.1, 0.078, 0.071},
+		}
+
+		local r, g, b = unpack(ColorBySpecID[specid])
+		AFKS.AFKMode.bottom.leftendtex:SetColorTexture(r, g, b)
+		AFKS.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight - 3)
+		AFKS.AFKMode.bottom.leftendtex:Show()
+	end
+
 	local SpecIDToBackgroundAtlas = {
 		-- Death Knight
 		[250] = "talents-background-deathknight-blood",
@@ -637,10 +756,10 @@ local function SetSpecPanel()
 	}
 
 	local panel_offset = { -- 0.049 + offset to toptexcoord
-		[63] = 0.010, -- Fire Mage
+		[63] = 0.01, -- Fire Mage
 		[64] = 0.05, -- Frost Mage
 		[65] = -0.015, -- Holy Paladin
-		[66] = 0.010, -- Protect Paladin
+		[66] = 0.01, -- Protect Paladin
 		[70] = 0.075, -- Ret Paladin
 		[71] = 0.042, -- Arms Warrior
 		[72] = 0.005, -- Fury Warrior
@@ -648,24 +767,25 @@ local function SetSpecPanel()
 		[102] = 0.006, -- Balance Druid
 		[103] = 0.037, -- Feral Druid
 		[104] = 0.025, -- Guardian Druid
-		[105] = 0.010, -- Resto Druid
+		[105] = 0.01, -- Resto Druid
 		[250] = -0.02, -- Blood DK
 		[251] = -0.01, -- Frost DK
 		[252] = 0.117, -- Unholy DK
-		[253] = -0.010, -- Beast Hunter
+		[253] = -0.01, -- Beast Hunter
 		[254] = 0.005, -- Marksmanship Hunter
 		[255] = 0.057, -- Survival Hunter
 		[256] = 0.012, -- Discipline Priest
-		[259] = 0.020, -- Assassination Rogue
+		[259] = 0.02, -- Assassination Rogue
 		[261] = 0.064, -- Subtlety Rogue
 		[262] = 0.037, -- Elemental Shaman
 		[263] = -0.01, -- Enhancement Shaman
 		[264] = 0.037, -- Resto Shaman
-		[265] = 0.020, -- Affl Warlock
+		[265] = 0.02, -- Affl Warlock
 		[266] = -0.035, -- Demon Warlock
-		[267] = 0.030, -- Dest Warlock
+		[267] = 0.03, -- Dest Warlock
 		[268] = 0.025, -- Brew Monk
 		[269] = 0.015, -- Wind Monk
+		[577] = 0.012, -- Havoc DH
 		[581] = 0.022, -- Vengeance DH
 		[1467] = 0.014, -- Devast Evoker
 		[1468] = 0.023, -- Preserv Evoker
@@ -673,21 +793,34 @@ local function SetSpecPanel()
 	}
 
 	local model_yoffset = {
-			[1] = 30, -- Human
-			[2] = -15, -- Orc
-			[3] = 40, -- Dwarf
-			[5] = 10, -- Undead
-			[6] = 35, -- Tauren
-			[8] = 10, -- Troll
-			[11] = 8, -- Draenei
-			[22] = 50, -- Worgen
-			[24] = 73, -- Pandaren (Neutral)
-			[25] = 73, -- Pandaren (Horde)
-			[26] = 73, -- Pandaren (Alliance)
-			[28] = 65, -- Highmountain
-			[30] = 20, -- Lightforged
-			[31] = 5, -- Zandalari
-			[34] = 40, -- Dark Iron Dwarf
+		[1] = 30, -- Human
+		[2] = -15, -- Orc
+		[3] = -10, -- Dwarf
+		[5] = 10, -- Undead
+		[6] = 35, -- Tauren
+		[8] = 10, -- Troll
+		[9] = -10, -- Goblin
+		[11] = 8, -- Draenei
+		[24] = 25, -- Pandaren (Neutral)
+		[25] = 25, -- Pandaren (Alliance)
+		[26] = 25, -- Pandaren (Horde)
+		[28] = 25, -- Highmountain
+		[30] = 20, -- Lightforged
+		[31] = 5, -- Zandalari
+		[32] = 15, -- Kul Tiran
+		[34] = -20, -- Dark Iron Dwarf
+	}
+
+	local needs_to_resize = {
+		[3] = 1.6,
+		[8] = 1.8,
+		[9] = 1.7,
+		[24] = 1.7,
+		[25] = 1.7,
+		[26] = 1.7,
+		[28] = 1.8,
+		[32] = 1.8,
+		[34] = 1.6
 	}
 
 	local yoffset = GetScreenHeight() * 0.1 - 102.4
@@ -698,24 +831,55 @@ local function SetSpecPanel()
 	end
 	
 	local raceid = select(3, UnitRace("player"))
-	if model_yoffset[raceid] then
-		yoffset = yoffset + model_yoffset[raceid]
+
+	if needs_to_resize[raceid] then
+		AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * needs_to_resize[raceid], GetScreenHeight() * needs_to_resize[raceid])
 	end
-	if select(2, UnitClass("player")) == "DRUID" then
-		if C_UnitAuras_GetPlayerAuraBySpellID(5487) then -- Bear form
-			yoffset = yoffset + 25
-		elseif C_UnitAuras_GetPlayerAuraBySpellID(768) then -- Cat form
-			yoffset = yoffset - 135
-		elseif C_UnitAuras_GetPlayerAuraBySpellID(783) then -- Flying form
-			yoffset = yoffset + 40
-		elseif C_UnitAuras_GetPlayerAuraBySpellID(197625) then -- Moonkin form
-			yoffset = yoffset - 50
-		end
-	elseif select(2, UnitClass("player")) == "EVOKER" then
-		if C_UnitAuras_GetPlayerAuraBySpellID(372014) then
-			yoffset = yoffset + -7
+
+	if raceid == 22 then -- Worgen
+		if WantsAlteredForm("player") then
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 1.8, GetScreenHeight() * 1.8)
+			yoffset = yoffset + 30
 		else
-			yoffset = yoffset + 80
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
+			yoffset = yoffset + -7
+		end
+	elseif raceid == 52 or raceid == 70 then -- Dracthyr
+		if WantsAlteredForm("player") then
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 1.7, GetScreenHeight() * 1.7)
+			yoffset = yoffset + 30
+		else
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
+			yoffset = yoffset + -7
+		end
+	else
+		if model_yoffset[raceid] then
+			yoffset = yoffset + model_yoffset[raceid]
+		end
+	end
+
+	if select(2, UnitClass("player")) == "DRUID" then
+		if GetShapeshiftFormID() == 5 then -- Bear form
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 1, GetScreenHeight() * 1)
+			yoffset = yoffset + -120
+		elseif GetShapeshiftFormID() == 1 then -- Cat form
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
+			yoffset = yoffset - 135
+		elseif GetShapeshiftFormID() == 27 or GetShapeshiftFormID() == 29 then -- Flying form
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 1.4, GetScreenHeight() * 1.4)
+			yoffset = yoffset + -10
+		elseif GetShapeshiftFormID() == 31 or GetShapeshiftFormID() == 35 then -- Moonkin form
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
+			yoffset = yoffset + -55
+		elseif GetShapeshiftFormID() == 36 then -- Treant form
+			AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 1.2, GetScreenHeight() * 1.2)
+			yoffset = yoffset + -30
+		else
+			if needs_to_resize[raceid] then
+				AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * needs_to_resize[raceid], GetScreenHeight() * needs_to_resize[raceid])
+			else
+				AFKS.AFKMode.bottom.model:SetSize(GetScreenWidth() * 2, GetScreenHeight() * 2)
+			end
 		end
 	end
 	AFKS.AFKMode.bottom.modelHolder:ClearAllPoints()
@@ -724,98 +888,23 @@ local function SetSpecPanel()
 	local specid = select(1, GetSpecializationInfo(GetSpecialization())) 
 	local atlasinfo = specid and SpecIDToBackgroundAtlas[specid]
 	local offset = panel_offset[specid] or 0
-	local info = atlasinfo and C_Texture_GetAtlasInfo(atlasinfo)
+	local info = atlasinfo and GetAtlasInfo(atlasinfo)
 
 	if info then
-		if not AFKS.AFKMode.bottom.specpanel:IsVisible() then
-			AFKS.AFKMode.bottom:SetBackdropColor(.06, .06, .06, 0)
-			AFKS.AFKMode.bottom.specpanel:Show()
-			AFKS.AFKMode.bottom.specpanelend:Show()
-		end
+		AFKS.AFKMode.bottom:SetBackdropColor(.06, .06, .06, 0)
+		AFKS.AFKMode.bottom.specpanel:Show()
 		AFKS.AFKMode.bottom.specpanel:SetTexture(info.file)
 		AFKS.AFKMode.bottom.specpanel:SetTexCoord(info.leftTexCoord, info.rightTexCoord, info.topTexCoord+0.049+offset, info.bottomTexCoord)
+		if GetScreenWidth() - 1567 > 0 then
+			SetLeftEndColor(specid)
+		else
+			AFKS.AFKMode.bottom.leftendtex:Hide()
+		end
 	else
 		AFKS.AFKMode.bottom:SetBackdropColor(.06, .06, .06, .8)
 		AFKS.AFKMode.bottom.specpanel:Hide()
-		AFKS.AFKMode.bottom.specpanelend:Hide()
+		AFKS.AFKMode.bottom.leftendtex:Hide()
 	end
-end
-
-local function SetLeftEndColor()
-	if not AFKS.AFKMode.bottom.leftendtex:IsVisible() then
-		return
-	end
-
-	local ColorBySpecID = {
-		-- Death Knight
-		[250] = {r=0.082, g=0.078, b=0.078},
-		[251] = {r=0.019, g=0.11, b=0.176},
-		[252] = {r=0.07, g=0.082, b=0.027},
-
-		-- Demon Hunter
-		[577] = {r=0.043, g=0.1, b=0.078},
-		[581] = {r=0.07, g=0.055, b=0.18},
-
-		-- Druid
-		[102] = {r=0.086, g=0.1, b=0.243},
-		[103] = {r=0.082, g=0.129, b=0.188},
-		[104] = {r=0.172, g=0.086, b=0.002},
-		[105] = {r=0.058, g=0.086, b=0.002},
-
-		-- Evoker
-		[1467] = {r=0.1, g=0.063, b=0.1},
-		[1468] = {r=0.062, g=0.121, b=0.105},
-		[1473] = {r=0.1, g=0.1, b=0.067},
-
-		-- Hunter
-		[253] = {r=0.082, g=0.098, b=0.235},
-		[254] = {r=0.066, g=0.09, b=0.043},
-		[255] = {r=0.176, g=0.152, b=0.137},
-
-		-- Mage
-		[62] = {r=0.066, g=0.023, b=0.141},
-		[63] = {r=0.1, g=0.059, b=0.035},
-		[64] = {r=0.062, g=0.078, b=0.145},
-
-		-- Monk
-		[268] = {r=0.082, g=0.09, b=0},
-		[269] = {r=0.125, g=0.1, b=0.16},
-		[270] = {r=0.118, g=0.149, b=0.255},
-
-		-- Paladin
-		[65] = {r=0.1, g=0.067, b=0.047},
-		[66] = {r=0.176, g=0.067, b=0.129},
-		[70] = {r=0.184, g=0.145, b=0.047},
-
-		-- Priest
-		[256] = {r=0.066, g=0.086, b=0.1},
-		[257] = {r=0.18, g=0.145, b=0.122},
-		[258] = {r=0.113, g=0.07, b=0.086},
-
-		-- Rogue
-		[259] = {r=0.113, g=0.066, b=0.003},
-		[260] = {r=0.043, g=0.086, b=0.082},
-		[261] = {r=0.075, g=0.043, b=0.075},
-
-		-- Shaman
-		[262] = {r=0.003, g=0.078, b=0.149},
-		[263] = {r=0.074, g=0.07, b=0.156},
-		[264] = {r=0.082, g=0.086, b=0.121},
-
-		-- Warlock
-		[265] = {r=0.07, g=0.063, b=0.22},
-		[266] = {r=0.078, g=0.078, b=0.074},
-		[267] = {r=0.1, g=0.055, b=0.031},
-
-		-- Warrior
-		[71] = {r=0.05, g=0.078, b=0.082},
-		[72] = {r=0.066, g=0.07, b=0.074},
-		[73] = {r=0.1, g=0.078, b=0.071},
-	}
-
-	local specid = select(1, GetSpecializationInfo(GetSpecialization()))
-	local r, g, b = ColorBySpecID[specid].r, ColorBySpecID[specid].g, ColorBySpecID[specid].b
-	AFKS.AFKMode.bottom.leftendtex:SetColorTexture(r, g, b)
 end
 
 local function SetSpecIcon()
@@ -829,31 +918,59 @@ local function SetSpecIcon()
 				AFKS.AFKMode.bottom.specicon:Hide()
 			end
 		else
-			local talent_points = {}
-			local spent = 0
-			local specicon
+			if wowVersion == "cata" then
+				local talent_points = {}
+				local spent = 0
+				local specicon
 
-			for i=1, GetNumTalentTabs() do
-				talent_points[i] = {}
-				talent_points[i]["icon"] = select(4, GetTalentTabInfo(i))
-				talent_points[i]["spent"] = select(5, GetTalentTabInfo(i))
-			end
-			for k, v in pairs(talent_points) do
-				if k == 1 then
-					spent = v["spent"]
-					specicon = v["icon"]
-				else
-					if v["spent"] > spent then
-						specicon = v["icon"]
+				for i=1, GetNumTalentTabs() do
+					talent_points[i] = {}
+					talent_points[i]["icon"] = select(4, GetTalentTabInfo(i))
+					talent_points[i]["spent"] = select(5, GetTalentTabInfo(i))
+				end
+				for k, v in pairs(talent_points) do
+					if k == 1 then
 						spent = v["spent"]
+						specicon = v["icon"]
+					else
+						if v["spent"] > spent then
+							specicon = v["icon"]
+							spent = v["spent"]
+						end
 					end
 				end
-			end
-			if specicon then
-				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
-				AFKS.AFKMode.bottom.specicon:Show()
+				if specicon then
+					AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+					AFKS.AFKMode.bottom.specicon:Show()
+				else
+					AFKS.AFKMode.bottom.specicon:Hide()
+				end
 			else
-				AFKS.AFKMode.bottom.specicon:Hide()
+				local primaryTalent
+				local talent_tree = {}
+
+				for i=1, GetNumTalentTabs() do
+					talent_tree[i] = select(3, GetTalentTabInfo(i))
+				end
+				for k, v in pairs(talent_tree) do
+					if k > 1 and v > talent_tree[k-1] then
+						primaryTalent = k
+					else
+						primaryTalent = 1
+					end
+				end
+				if primaryTalent == 1 and talent_tree[1] == 0 then
+					AFKS.AFKMode.bottom.specicon:Hide()
+					return
+				end
+
+				local specicon = select(2, GetTalentTabInfo(primaryTalent))
+				if specicon then
+					AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+					AFKS.AFKMode.bottom.specicon:Show()
+				else
+					AFKS.AFKMode.bottom.specicon:Hide()
+				end
 			end
 		end
 	else
@@ -893,8 +1010,8 @@ local function SetDate(weekday_str, weekday_num)
 end
 
 local function GetCalendarSchedule(day, hour)
-	for i = 1, C_Calendar_GetNumDayEvents(0, day) do
-		local event = C_Calendar_GetDayEvent(0, day, i)
+	for i = 1, GetNumDayEvents(0, day) do
+		local event = GetDayEvent(0, day, i)
 		if event and event.calendarType == "PLAYER" and event.startTime.hour > hour then
 			if event.inviteStatus == 2 or event.inviteStatus == 4 then
 				return
@@ -933,8 +1050,14 @@ local function GetWoWLogo()
 	local expansion
 	if wowVersion == "retail" then
 		expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel())
-	else
+	elseif wowVersion == "wrath" or wowVersion == "cata" then
 		expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
+	else
+		local gamemode = GetCurrentGameModeRecordID()
+		expansion = GetGameModeDisplayInfo(gamemode)
+		if not expansion then
+			expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
+		end
 	end
 	return expansion and expansion.logo
 end
@@ -966,7 +1089,18 @@ function AFKS:RenderOptions()
 	end)
 	hidechat:SetChecked(self.options.hidechat)
 
-	InterfaceOptions_AddCategory(panel)
+	local group = CreateFrame("CheckButton", nil, panel, "ChatConfigCheckButtonTemplate")
+	group:SetPoint("TOPLEFT", 10, -95)
+	group.Text:SetText(AFKS_GROUP_TEXT)
+	group.tooltip = AFKS_GROUP_TOOLTIP
+	group:HookScript("OnClick", function(_, btn, down)
+		self.options.group = group:GetChecked()
+	end)
+	group:SetChecked(self.options.group)
+
+	local category, layout = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+	Settings.RegisterAddOnCategory(category)
+	category.ID = panel.name
 end
 
 function AFKS:Init()
@@ -985,6 +1119,33 @@ function AFKS:Init()
 	self.AFKMode:Hide()
 	self.AFKMode:EnableKeyboard(true)
 	self.AFKMode:SetScript("OnKeyDown", OnKeyDown)
+
+	self.AFKMode.exitpanel = CreateFrame("Frame", nil, self.AFKMode)
+	self.AFKMode.exitpanel:SetSize(30, 30)
+	self.AFKMode.exitpanel:SetPoint("TOPRIGHT", self.AFKMode, "TOPRIGHT", 0, 0)
+	self.AFKMode.exitbutton = CreateFrame("Button", nil, self.AFKMode.exitpanel, "UIPanelCloseButton")
+	self.AFKMode.exitbutton:SetSize(25, 25)
+	self.AFKMode.exitbutton:SetPoint("CENTER", self.AFKMode.exitpanel, 0, 0)
+	self.AFKMode.exitbutton:Hide()
+	self.AFKMode.exitbutton:SetScript("OnClick", function()
+		UIParent:Show()
+		AFKS.AFKMode:Hide()
+		MoveViewLeftStop()
+
+		AFKS.timer:Cancel()
+		if AFKS.animTimer then
+			AFKS.animTimer:Cancel()
+		end
+		AFKS.AFKMode.bottom.timer:SetText("00:00")
+
+		AFKS.AFKMode.exitbutton:Hide()
+		AFKS.AFKMode.chat:UnregisterAllEvents()
+		AFKS.AFKMode.chat:Clear()
+
+		AFKS.isAFK = false
+		AFKS.isCinematic = false
+	end)
+	self.AFKMode.exitpanel:SetScript("OnMouseDown", function() AFKS.AFKMode.exitbutton:Show() end)
 
 	self.AFKMode.chat = CreateFrame("ScrollingMessageFrame", nil, self.AFKMode)
 	self.AFKMode.chat:SetSize(500, 300)
@@ -1050,13 +1211,8 @@ function AFKS:Init()
 		self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
 		self.AFKMode.bottom.leftend = CreateFrame("Frame", nil, self.AFKMode.bottom)
 		self.AFKMode.bottom.leftendtex = self.AFKMode.bottom.leftend:CreateTexture(nil, "BACKGROUND")
-		if GetScreenWidth() - 1567 > 0 then
-			self.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight - 3)
-			self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
-			self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
-		else
-			self.AFKMode.bottom.leftendtex:Hide()
-		end
+		self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
+		self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
 	end
 
 	if wowVersion == "retail" or wowVersion == "cata" then
@@ -1112,6 +1268,7 @@ function AFKS:Init()
 		end
 		self.AFKMode.bottom.specicon:SetPoint("CENTER", self.AFKMode.bottom.name, "RIGHT", 15, -2)
 		self.AFKMode.bottom.specicon:SetSize(25, 25)
+		self.AFKMode.bottom.specicon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 	end
 
 	if wowVersion == "retail" then
@@ -1163,11 +1320,12 @@ function AFKS:Init()
 		if(timePassed > self.duration) and self.isIdle ~= true then
 			self:SetAnimation(0)
 			self.isIdle = true
-			AFKS.animTimer = C_TimerNewTimer(self.idleDuration, LoopAnimations)
+			AFKS.animTimer = NewTimer(self.idleDuration, LoopAnimations)
 		end
 	end)
 
 	self.isInterrupted = false
+	self.isCinematic = false
 
 	self:SetScript("OnEvent", function(event, ...)
 		self:OnEvent(...)
@@ -1179,11 +1337,13 @@ do
 
 	AFKS:Init()
 
-	hooksecurefunc ("LFGListInviteDialog_Show", function()
-		if not InCombatLockdown() then
-			AFKS:SetAFK(false)
-		end
-	end)
+	if LFGListInviteDialog_Show then
+		hooksecurefunc ("LFGListInviteDialog_Show", function()
+			if not InCombatLockdown() then
+				AFKS:SetAFK(false)
+			end
+		end)
+	end
 
 	if wowVersion == "retail" then
 		AddonCompartmentFrame:RegisterAddon({
@@ -1234,14 +1394,6 @@ function AFKS:SetAFK(status)
 					yoffset = 0
 				end
 				self.AFKMode.bottom.specpanel:SetPoint("RIGHT", self.AFKMode.bottom, "BOTTOMRIGHT", 0, -285 + yoffset)
-				if GetScreenWidth() - 1567 > 0 then
-					self.AFKMode.bottom.leftendtex:SetSize(GetScreenWidth() - 1567, panelheight - 3)
-					self.AFKMode.bottom.leftendtex:SetPoint("LEFT", self.AFKMode.bottom, "LEFT", 0, 0)
-					self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
-					self.AFKMode.bottom.leftendtex:Show()
-				else
-					self.AFKMode.bottom.leftendtex:Hide()
-				end
 			else
 				if yoffset > 0 then
 					yoffset = yoffset + 30
@@ -1274,7 +1426,6 @@ function AFKS:SetAFK(status)
 
 		if wowVersion == "retail" then
 			SetSpecPanel()
-			SetLeftEndColor()
 		end
 
 		if wowVersion == "retail" or wowVersion == "cata" then
@@ -1289,15 +1440,18 @@ function AFKS:SetAFK(status)
 		self.AFKMode.bottom.model:SetAnimation(67)
 		self.AFKMode.bottom.model.idleDuration = 40
 		self.startTime = GetTime()
-		self.timer = C_TimerNewTicker(1, function() self:UpdateTimer() end)
+		self.timer = NewTicker(1, function() self:UpdateTimer() end)
 
 		if self.AFKMode.chatminbar.minimized then
 			self.AFKMode.chatminbar.unreadwhisper = 0
 			self.AFKMode.chatminbar.unreadbnet = 0
 			self.AFKMode.chatminbar.unreadchannel = 0
 			self.AFKMode.chatminbar.unreadguild = 0
-			self.AFKMode.chatminbar.unreadgroup = 0
-			self.AFKMode.chatminbar.title:SetText(format(AFKS_CHATBARTITLE, 0, 0, 0, 0))
+
+			local text = format(AFKS_CHATBAR_TEXT, AFKS.AFKMode.chatminbar.unreadwhisper, AFKS.AFKMode.chatminbar.unreadbnet, AFKS.AFKMode.chatminbar.unreadchannel)
+			if IsInGuild() then
+				text = text.." "..format(AFKS_CHATBAR_GUILD, AFKS.AFKMode.chatminbar.unreadguild)
+			end
 		end
 
 		if self.options.hidechat then
@@ -1326,14 +1480,18 @@ function AFKS:SetAFK(status)
 		end
 		self.AFKMode.bottom.timer:SetText("00:00")
 
+		self.AFKMode.exitbutton:Hide()
 		self.AFKMode.chat:UnregisterAllEvents()
 		self.AFKMode.chat:Clear()
 
+		--[[
 		if wowVersion == "retail" and PVEFrame:IsShown() then --odd bug, frame is blank
-			--PVEFrame_ToggleFrame()
-			--PVEFrame_ToggleFrame()
+			PVEFrame_ToggleFrame()
+			PVEFrame_ToggleFrame()
 		end
+		]]
 
 		self.isAFK = false
+		self.isCinematic = false
 	end
 end
