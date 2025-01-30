@@ -801,9 +801,9 @@ local function SetSpecPanel()
 		[8] = 10, -- Troll
 		[9] = -10, -- Goblin
 		[11] = 8, -- Draenei
-		[24] = 25, -- Pandaren (Neutral)
-		[25] = 25, -- Pandaren (Alliance)
-		[26] = 25, -- Pandaren (Horde)
+		[24] = 0, -- Pandaren (Neutral)
+		[25] = 0, -- Pandaren (Alliance)
+		[26] = 0, -- Pandaren (Horde)
 		[28] = 25, -- Highmountain
 		[30] = 20, -- Lightforged
 		[31] = 5, -- Zandalari
@@ -815,9 +815,9 @@ local function SetSpecPanel()
 		[3] = 1.6,
 		[8] = 1.8,
 		[9] = 1.7,
-		[24] = 1.7,
-		[25] = 1.7,
-		[26] = 1.7,
+		[24] = 1.5,
+		[25] = 1.5,
+		[26] = 1.5,
 		[28] = 1.8,
 		[32] = 1.8,
 		[34] = 1.6
