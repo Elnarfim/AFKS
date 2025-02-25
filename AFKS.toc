@@ -1,6 +1,6 @@
-## Interface: 100207
+## Interface: 110100, 40402, 30403, 11506
 ## Author: Elnarfim
-## Version: 1.92
+## Version: 1.99
 ## IconTexture: Interface\AddOns\AFKS\AFKS-icon.tga
 ## Title: AFKS - AFK Screen
 ## Title-koKR: AFKS - 자리비움 스크린

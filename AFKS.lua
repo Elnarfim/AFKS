@@ -809,6 +809,7 @@ local function SetSpecPanel()
 		[31] = 5, -- Zandalari
 		[32] = 15, -- Kul Tiran
 		[34] = -20, -- Dark Iron Dwarf
+		[85] = 10, -- Earthen
 	}
 
 	local needs_to_resize = {
