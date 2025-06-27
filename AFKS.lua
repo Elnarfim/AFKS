@@ -14,6 +14,8 @@ elseif WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC then
 	wowVersion = "wrath" -- CN only
 elseif WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC then
 	wowVersion = "cata"
+elseif WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC then
+	wowVersion = "mop"
 elseif WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	wowVersion = "retail"
 end
@@ -58,17 +60,17 @@ local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 
 --Retail only API
 local GetAtlasInfo
-local GetSpecializationInfo
-local GetSpecialization
 local PetBattles_IsInBattle
 local IsRecipeRepeating
 local GetStreamInfo
 local GetClubInfo
 local GetGlidingInfo
 
---Retail and Cata API
+--Retail and Cata MoP API
 local GetNumDayEvents
 local GetDayEvent
+local GetSpecializationInfo
+local GetSpecialization
 
 --Cata and Wrath API
 local GetNumTalentTabs
@@ -77,9 +79,9 @@ local GetTalentTabInfo
 --Classic only API
 local CastingInfo
 local GetCurrentGameModeRecordID
-local GetGameModeDisplayInfo
+local GetGameModeDisplayInfoByRecordID
 
-if wowVersion == "retail" or wowVersion == "cata" then
+if wowVersion ~= "classic" then
 	GetNumDayEvents = _G.C_Calendar.GetNumDayEvents
 	GetDayEvent = _G.C_Calendar.GetDayEvent
 end
@@ -87,6 +89,11 @@ end
 if wowVersion == "cata" then
 	GetNumTalentTabs = _G.GetNumTalentTabs
 	GetTalentTabInfo = _G.GetTalentTabInfo
+end
+
+if wowVersion == "mop" then
+	GetSpecializationInfo = C_SpecializationInfo.GetSpecializationInfo
+	GetSpecialization = C_SpecializationInfo.GetSpecialization
 end
 
 if wowVersion == "retail" then
@@ -100,8 +107,8 @@ if wowVersion == "retail" then
 	GetGlidingInfo = _G.C_PlayerInfo.GetGlidingInfo
 else
 	CastingInfo = _G.CastingInfo
-	GetCurrentGameModeRecordID = _G.C_GameModeManager.GetCurrentGameModeRecordID
-	GetGameModeDisplayInfo = _G.C_GameModeManager.GetGameModeDisplayInfo
+	GetCurrentGameModeRecordID = _G.C_GameRules.GetCurrentGameModeRecordID
+	GetGameModeDisplayInfoByRecordID = _G.C_GameRules.GetGameModeDisplayInfoByRecordID
 end
 
 --WoW Functions / Frames
@@ -142,6 +149,7 @@ end
 local public_channels = {
 	["retail"] = {26, 42},
 	["cata"] = {23, 25, 26},
+	["mop"] = {23, 25, 26},
 	["classic"] = {23, 24, 25},
 }
 
@@ -918,60 +926,66 @@ local function SetSpecIcon()
 			else
 				AFKS.AFKMode.bottom.specicon:Hide()
 			end
-		else
-			if wowVersion == "cata" then
-				local talent_points = {}
-				local spent = 0
-				local specicon
-
-				for i=1, GetNumTalentTabs() do
-					talent_points[i] = {}
-					talent_points[i]["icon"] = select(4, GetTalentTabInfo(i))
-					talent_points[i]["spent"] = select(5, GetTalentTabInfo(i))
-				end
-				for k, v in pairs(talent_points) do
-					if k == 1 then
-						spent = v["spent"]
-						specicon = v["icon"]
-					else
-						if v["spent"] > spent then
-							specicon = v["icon"]
-							spent = v["spent"]
-						end
-					end
-				end
-				if specicon then
-					AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
-					AFKS.AFKMode.bottom.specicon:Show()
-				else
-					AFKS.AFKMode.bottom.specicon:Hide()
-				end
+		elseif wowVersion == "mop" then
+			local specicon = select(4, GetSpecializationInfo(GetSpecialization()))
+			if specicon then
+				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+				AFKS.AFKMode.bottom.specicon:Show()
 			else
-				local primaryTalent
-				local talent_tree = {}
+				AFKS.AFKMode.bottom.specicon:Hide()
+			end
+		elseif wowVersion == "cata" then
+			local talent_points = {}
+			local spent = 0
+			local specicon
 
-				for i=1, GetNumTalentTabs() do
-					talent_tree[i] = select(3, GetTalentTabInfo(i))
-				end
-				for k, v in pairs(talent_tree) do
-					if k > 1 and v > talent_tree[k-1] then
-						primaryTalent = k
-					else
-						primaryTalent = 1
+			for i=1, GetNumTalentTabs() do
+				talent_points[i] = {}
+				talent_points[i]["icon"] = select(4, GetTalentTabInfo(i))
+				talent_points[i]["spent"] = select(5, GetTalentTabInfo(i))
+			end
+			for k, v in pairs(talent_points) do
+				if k == 1 then
+					spent = v["spent"]
+					specicon = v["icon"]
+				else
+					if v["spent"] > spent then
+						specicon = v["icon"]
+						spent = v["spent"]
 					end
 				end
-				if primaryTalent == 1 and talent_tree[1] == 0 then
-					AFKS.AFKMode.bottom.specicon:Hide()
-					return
-				end
+			end
+			if specicon then
+				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+				AFKS.AFKMode.bottom.specicon:Show()
+			else
+				AFKS.AFKMode.bottom.specicon:Hide()
+			end
+		else
+			local primaryTalent
+			local talent_tree = {}
 
-				local specicon = select(2, GetTalentTabInfo(primaryTalent))
-				if specicon then
-					AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
-					AFKS.AFKMode.bottom.specicon:Show()
+			for i=1, GetNumTalentTabs() do
+				talent_tree[i] = select(3, GetTalentTabInfo(i))
+			end
+			for k, v in pairs(talent_tree) do
+				if k > 1 and v > talent_tree[k-1] then
+					primaryTalent = k
 				else
-					AFKS.AFKMode.bottom.specicon:Hide()
+					primaryTalent = 1
 				end
+			end
+			if primaryTalent == 1 and talent_tree[1] == 0 then
+				AFKS.AFKMode.bottom.specicon:Hide()
+				return
+			end
+
+			local specicon = select(2, GetTalentTabInfo(primaryTalent))
+			if specicon then
+				AFKS.AFKMode.bottom.specicon:SetTexture(specicon)
+				AFKS.AFKMode.bottom.specicon:Show()
+			else
+				AFKS.AFKMode.bottom.specicon:Hide()
 			end
 		end
 	else
@@ -1051,14 +1065,11 @@ local function GetWoWLogo()
 	local expansion
 	if wowVersion == "retail" then
 		expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel())
-	elseif wowVersion == "wrath" or wowVersion == "cata" then
+	elseif wowVersion == "wrath" or wowVersion == "cata" or wowVersion == "mop" then
 		expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
 	else
-		local gamemode = GetCurrentGameModeRecordID()
-		expansion = GetGameModeDisplayInfo(gamemode)
-		if not expansion then
-			expansion = GetExpansionDisplayInfo(GetClientDisplayExpansionLevel(), _G.LE_RELEASE_TYPE_CLASSIC)
-		end
+		local gameModeRecordID = GetCurrentGameModeRecordID()
+		expansion = GetGameModeDisplayInfoByRecordID(gameModeRecordID)
 	end
 	return expansion and expansion.logo
 end
@@ -1216,7 +1227,7 @@ function AFKS:Init()
 		self.AFKMode.bottom.leftendtex:SetTexture("Interface/BUTTONS/WHITE8X8")
 	end
 
-	if wowVersion == "retail" or wowVersion == "cata" then
+	if wowVersion == "retail" or wowVersion == "cata" or wowVersion == "mop" then
 		self.AFKMode.bottom.schedule = self.AFKMode.bottom:CreateFontString(nil, "OVERLAY")
 		FontTemplate(self.AFKMode.bottom.schedule, 20, "OUTLINE")
 		self.AFKMode.bottom.schedule:SetPoint("BOTTOMLEFT", self.AFKMode.bottom.logo, "BOTTOMRIGHT", 200, 0)
@@ -1366,7 +1377,7 @@ function AFKS:UpdateTimer()
 
 	if date("%H") == "23" and date("%M") == "59" and tonumber(date("%S")) >= 55 then
 		SetDate(date("%a"), tonumber(date("%w")))
-		if wowVersion == "retail" or wowVersion == "cata" then
+		if wowVersion == "retail" or wowVersion == "cata" or wowVersion == "mop" then
 			GetCalendarSchedule(tonumber(date("%d")), tonumber(date("%H")))
 		end
 	end
@@ -1429,7 +1440,7 @@ function AFKS:SetAFK(status)
 			SetSpecPanel()
 		end
 
-		if wowVersion == "retail" or wowVersion == "cata" then
+		if wowVersion == "retail" or wowVersion == "cata" or wowVersion == "mop" then
 			GetCalendarSchedule(tonumber(date("%d")), tonumber(date("%H")))
 		end
 
@@ -1473,6 +1484,9 @@ function AFKS:SetAFK(status)
 	elseif not status and self.isAFK then
 		UIParent:Show()
 		self.AFKMode:Hide()
+		if wowVersion == "retail" and HasNewMail() then
+			MinimapCluster.IndicatorFrame.MailFrame.MailIcon:Show()
+		end
 		MoveViewLeftStop()
 
 		self.timer:Cancel()
