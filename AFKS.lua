@@ -81,7 +81,7 @@ local CastingInfo
 local GetCurrentGameModeRecordID
 local GetGameModeDisplayInfoByRecordID
 
-if wowVersion ~= "classic" then
+if wowVersion == "retail" or wowVersion == "cata" then
 	GetNumDayEvents = _G.C_Calendar.GetNumDayEvents
 	GetDayEvent = _G.C_Calendar.GetDayEvent
 end
